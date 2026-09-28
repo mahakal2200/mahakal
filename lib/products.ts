@@ -3,31 +3,49 @@ export type Product = {
   id: string;
   name: string;
   slug: string;
+
   category: string;
   subcategory: string;
+
   description: string;
+
   image: string;
   images?: string[];
+
   sizes: string[];
   colors: string[];
   fabric: string;
+
   minimumOrder: number;
+
+  wholesalePrice: number;
+  retailPrice: number;
+  stock: number;
+
   priceLabel: string;
+
   featured: boolean;
   available: boolean;
+
+  createdAt?: unknown;
+  updatedAt?: unknown;
 };
 
 export const products: Product[] = [];
 
 export function getAllProducts(): Product[] {
-  return products.filter((product) => product.available);
+  return products.filter(
+    (product) => product.available
+  );
 }
 
 export function getProductBySlug(
   slug: string
 ): Product | undefined {
   return products.find(
-    (product) => product.slug === slug && product.available
+    (product) =>
+      product.slug === slug &&
+      product.available
   );
 }
 
@@ -37,10 +55,12 @@ export function getProductsByCategory(
 ): Product[] {
   return products.filter((product) => {
     const categoryMatches =
-      product.category.toLowerCase() === category.toLowerCase();
+      product.category.toLowerCase() ===
+      category.toLowerCase();
 
     const subcategoryMatches = subcategory
-      ? product.subcategory.toLowerCase() === subcategory.toLowerCase()
+      ? product.subcategory.toLowerCase() ===
+        subcategory.toLowerCase()
       : true;
 
     return (
@@ -53,10 +73,16 @@ export function getProductsByCategory(
 
 export function getFeaturedProducts(): Product[] {
   return products.filter(
-    (product) => product.featured && product.available
+    (product) =>
+      product.featured &&
+      product.available
   );
 }
 
 export function getProductCategories(): string[] {
-  return [...new Set(products.map((product) => product.category))];
+  return [
+    ...new Set(
+      products.map((product) => product.category)
+    ),
+  ];
 }
