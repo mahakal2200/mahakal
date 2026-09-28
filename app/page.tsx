@@ -1,76 +1,67 @@
 
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { collection, getDocs, query, limit } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 const categories = [
-  {
-    name: "Shirts",
-    slug: "shirts",
-    description: "Formal, casual, printed & checks",
-    icon: "👔",
-  },
-  {
-    name: "T-Shirts",
-    slug: "t-shirts",
-    description: "Round neck, polo & oversized",
-    icon: "👕",
-  },
-  {
-    name: "Jeans",
-    slug: "jeans",
-    description: "Slim fit, regular & baggy",
-    icon: "👖",
-  },
-  {
-    name: "Trousers & Pants",
-    slug: "trousers",
-    description: "Formal, chinos & cargo",
-    icon: "🩳",
-  },
-  {
-    name: "Ethnic Wear",
-    slug: "ethnic-wear",
-    description: "Kurtas & festive collections",
-    icon: "🥻",
-  },
-  {
-    name: "Winter Wear",
-    slug: "winter-wear",
-    description: "Jackets, hoodies & sweaters",
-    icon: "🧥",
-  },
-  {
-    name: "Sportswear",
-    slug: "sportswear",
-    description: "Track pants, lowers & shorts",
-    icon: "🏃",
-  },
-  {
-    name: "Suits & Blazers",
-    slug: "suits-blazers",
-    description: "Blazers, suits & waistcoats",
-    icon: "🤵",
-  },
-  {
-    name: "Innerwear",
-    slug: "innerwear",
-    description: "Men's innerwear collection",
-    icon: "🩲",
-  },
-  {
-    name: "Nightwear",
-    slug: "nightwear",
-    description: "Night suits & pajamas",
-    icon: "🌙",
-  },
-  {
-    name: "Accessories",
-    slug: "accessories",
-    description: "Belts, socks & accessories",
-    icon: "🧦",
-  },
+  { name: "Shirts", slug: "shirts", description: "Formal, casual, printed & checks", icon: "👔" },
+  { name: "T-Shirts", slug: "t-shirts", description: "Round neck, polo & oversized", icon: "👕" },
+  { name: "Jeans", slug: "jeans", description: "Slim fit, regular & baggy", icon: "👖" },
+  { name: "Trousers & Pants", slug: "trousers", description: "Formal, chinos & cargo", icon: "🩳" },
+  { name: "Ethnic Wear", slug: "ethnic-wear", description: "Kurtas & festive collections", icon: "🥻" },
+  { name: "Winter Wear", slug: "winter-wear", description: "Jackets, hoodies & sweaters", icon: "🧥" },
+  { name: "Sportswear", slug: "sportswear", description: "Track pants, lowers & shorts", icon: "🏃" },
+  { name: "Suits & Blazers", slug: "suits-blazers", description: "Blazers, suits & waistcoats", icon: "🤵" },
+  { name: "Innerwear", slug: "innerwear", description: "Men's innerwear collection", icon: "🩲" },
+  { name: "Nightwear", slug: "nightwear", description: "Night suits & pajamas", icon: "🌙" },
+  { name: "Accessories", slug: "accessories", description: "Belts, socks & accessories", icon: "🧦" },
 ];
 
+type Product = {
+  id: string;
+  name: string;
+  slug: string;
+  category: string;
+  description: string;
+  wholesalePrice: number;
+  retailPrice: number;
+  stock: number;
+  image: string;
+};
+
 export default function Home() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+
+  useEffect(() => {
+    async function fetchProducts() {
+      try {
+        const productsQuery = query(
+          collection(db, "products"),
+          limit(100)
+        );
+
+        const snapshot = await getDocs(productsQuery);
+
+        const productData = snapshot.docs.map((item) => ({
+          id: item.id,
+          ...item.data(),
+        })) as Product[];
+
+        setProducts(productData);
+      } catch (error) {
+        console.error("Homepage products error:", error);
+      } finally {
+        setLoadingProducts(false);
+      }
+    }
+
+    fetchProducts();
+  }, []);
+
   return (
     <main className="min-h-screen bg-white text-gray-900">
       {/* Header */}
@@ -86,18 +77,11 @@ export default function Home() {
           </Link>
 
           <nav className="hidden items-center gap-6 text-sm font-medium md:flex">
-            <Link href="/" className="hover:text-red-700">
-              Home
-            </Link>
-            <Link href="#categories" className="hover:text-red-700">
-              Categories
-            </Link>
-            <Link href="#about" className="hover:text-red-700">
-              About Us
-            </Link>
-            <Link href="#enquiry" className="hover:text-red-700">
-              Contact
-            </Link>
+            <Link href="/" className="hover:text-red-700">Home</Link>
+            <Link href="#categories" className="hover:text-red-700">Categories</Link>
+            <Link href="#products" className="hover:text-red-700">Products</Link>
+            <Link href="#about" className="hover:text-red-700">About Us</Link>
+            <Link href="#enquiry" className="hover:text-red-700">Contact</Link>
           </nav>
 
           <Link
@@ -109,7 +93,7 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Hero Section */}
+      {/* Hero */}
       <section className="bg-gray-950 text-white">
         <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-16 md:grid-cols-2 md:py-24">
           <div>
@@ -132,7 +116,7 @@ export default function Home() {
 
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
-                href="#categories"
+                href="#products"
                 className="rounded-lg bg-red-700 px-6 py-3.5 font-bold text-white hover:bg-red-800"
               >
                 Explore Products
@@ -160,7 +144,7 @@ export default function Home() {
                 MAHAKAL A TO Z
               </p>
               <p className="mt-2 text-sm text-gray-400">
-                Your Men's Wear Wholesale Partner
+                Your Men&apos;s Wear Wholesale Partner
               </p>
             </div>
           </div>
@@ -214,6 +198,116 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Firestore Products */}
+      <section
+        id="products"
+        className="bg-gray-50 px-4 py-16 sm:py-20"
+      >
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-10 text-center">
+            <p className="font-bold uppercase tracking-widest text-red-700">
+              Latest Collection
+            </p>
+
+            <h2 className="mt-3 text-3xl font-black sm:text-4xl">
+              Our Products
+            </h2>
+
+            <p className="mx-auto mt-4 max-w-2xl text-gray-600">
+              Explore products available for wholesale and bulk enquiries.
+            </p>
+          </div>
+
+          {loadingProducts ? (
+            <div className="py-12 text-center text-gray-500">
+              Products loading...
+            </div>
+          ) : products.length === 0 ? (
+            <div className="rounded-xl border border-dashed bg-white px-5 py-12 text-center">
+              <div className="text-5xl">👔</div>
+              <h3 className="mt-4 text-xl font-bold">
+                Products Coming Soon
+              </h3>
+              <p className="mt-2 text-gray-500">
+                Our latest collection will be available here soon.
+              </p>
+              <Link
+                href="/enquiry"
+                className="mt-5 inline-block rounded-lg bg-red-700 px-6 py-3 font-bold text-white hover:bg-red-800"
+              >
+                Send an Enquiry
+              </Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {products.map((product) => (
+                <div
+                  key={product.id}
+                  className="overflow-hidden rounded-xl border border-gray-200 bg-white transition hover:-translate-y-1 hover:shadow-lg"
+                >
+                  <div className="aspect-square overflow-hidden bg-gray-100">
+                    {product.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={product.image}
+                        alt={product.name}
+                        className="h-full w-full object-cover transition duration-300 hover:scale-105"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-5xl">
+                        👔
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-red-700">
+                      {product.category}
+                    </p>
+
+                    <h3 className="mt-2 line-clamp-2 font-bold">
+                      {product.name}
+                    </h3>
+
+                    {product.description && (
+                      <p className="mt-2 line-clamp-2 text-sm text-gray-500">
+                        {product.description}
+                      </p>
+                    )}
+
+                    <div className="mt-4">
+                      <p className="text-xs text-gray-500">
+                        Wholesale Price
+                      </p>
+                      <p className="text-xl font-black text-gray-900">
+                        ₹{Number(product.wholesalePrice || 0).toLocaleString("en-IN")}
+                      </p>
+                    </div>
+
+                    <p className="mt-1 text-xs text-gray-500">
+                      Retail: ₹{Number(product.retailPrice || 0).toLocaleString("en-IN")}
+                    </p>
+
+                    <p className="mt-2 text-xs font-medium text-gray-600">
+                      {product.stock > 0
+                        ? "In Stock"
+                        : "Availability on enquiry"}
+                    </p>
+
+                    <Link
+                      href={`/enquiry?product=${encodeURIComponent(product.name)}`}
+                      className="mt-4 block rounded-lg bg-red-700 px-3 py-3 text-center text-sm font-bold text-white hover:bg-red-800"
+                    >
+                      Enquire on WhatsApp
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
       {/* Wholesale CTA */}
       <section
         id="enquiry"
@@ -251,7 +345,7 @@ export default function Home() {
           </h2>
 
           <p className="mt-5 leading-7 text-gray-600">
-            Mahakal A To Z is focused on men's wear wholesale.
+            Mahakal A To Z is focused on men&apos;s wear wholesale.
             We help retailers and shopkeepers explore our clothing
             collections and submit bulk purchase enquiries.
             Our team discusses product availability, wholesale
@@ -275,20 +369,14 @@ export default function Home() {
               MAHAKAL A TO Z
             </h2>
             <p className="mt-2 text-sm text-gray-400">
-              Men's Wear Wholesale & Bulk Supply
+              Men&apos;s Wear Wholesale & Bulk Supply
             </p>
           </div>
 
           <div className="flex flex-wrap gap-5 text-sm text-gray-300">
-            <Link href="/" className="hover:text-white">
-              Home
-            </Link>
-            <Link href="#categories" className="hover:text-white">
-              Categories
-            </Link>
-            <Link href="/enquiry" className="hover:text-white">
-              Enquiry
-            </Link>
+            <Link href="/" className="hover:text-white">Home</Link>
+            <Link href="#categories" className="hover:text-white">Categories</Link>
+            <Link href="/enquiry" className="hover:text-white">Enquiry</Link>
           </div>
         </div>
 
