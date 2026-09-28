@@ -10,7 +10,7 @@ const categories = [
   { name: "Shirts", slug: "shirts", description: "Formal, casual, printed & checks", icon: "👔" },
   { name: "T-Shirts", slug: "t-shirts", description: "Round neck, polo & oversized", icon: "👕" },
   { name: "Jeans", slug: "jeans", description: "Slim fit, regular & baggy", icon: "👖" },
-  { name: "Trousers & Pants", slug: "trousers", description: "Formal, chinos & cargo", icon: "🩳" },
+{ name: "Trousers & Pants", slug: "trousers-pants", description: "Formal, chinos & cargo", icon: "🩳" },
   { name: "Ethnic Wear", slug: "ethnic-wear", description: "Kurtas & festive collections", icon: "🥻" },
   { name: "Winter Wear", slug: "winter-wear", description: "Jackets, hoodies & sweaters", icon: "🧥" },
   { name: "Sportswear", slug: "sportswear", description: "Track pants, lowers & shorts", icon: "🏃" },
