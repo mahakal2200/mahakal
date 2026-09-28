@@ -170,16 +170,25 @@ export default function ProductDetailsClient({
     );
   }
 
-  const enquiryUrl =
-    `/enquiry?category=${encodeURIComponent(product.category)}` +
-    `&subcategory=${encodeURIComponent(product.name)}` +
-    `&product=${encodeURIComponent(product.slug)}`;
-
+ const enquiryUrl =
+  `/enquiry?category=${encodeURIComponent(product.category)}` +
+  `&subcategory=${encodeURIComponent(
+    product.subcategory || product.category
+  )}` +
+  `&product=${encodeURIComponent(product.name)}` +
+  `&slug=${encodeURIComponent(product.slug)}`;
   const whatsappMessage =
-    `Hello, I want to enquire about ${product.name}. ` +
-    `Category: ${product.category}. ` +
-    `Please share wholesale price and availability.`;
-
+  `Hello, I want to enquire about this product.\n\n` +
+  `Product: ${product.name}\n` +
+  `Category: ${product.category}\n` +
+  `Subcategory: ${product.subcategory || "Not specified"}\n` +
+  `Wholesale Price: ${product.priceLabel}\n` +
+  `Minimum Order: ${
+    product.minimumOrder > 0
+      ? `${product.minimumOrder} pieces`
+      : "Please confirm"
+  }\n\n` +
+  `Please share current stock, bulk pricing and delivery details.`;
   return (
     <main className="min-h-screen bg-gray-50">
       {/* Breadcrumb */}
