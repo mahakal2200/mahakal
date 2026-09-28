@@ -36,6 +36,7 @@ export default function Header() {
               Home
             </Link>
 
+            {/* Categories */}
             <div className="group relative">
               <button
                 type="button"
@@ -66,8 +67,19 @@ export default function Header() {
             </Link>
           </nav>
 
-          {/* Enquiry CTA */}
+          {/* Header Actions */}
           <div className="flex items-center gap-2">
+            {/* Admin Login */}
+            <Link
+              href="/admin/login"
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-3 text-sm font-bold text-gray-800 transition hover:border-red-600 hover:bg-red-50 hover:text-red-600"
+            >
+              <span aria-hidden="true">🔐</span>
+              <span className="hidden sm:inline">Admin Login</span>
+              <span className="sm:hidden">Admin</span>
+            </Link>
+
+            {/* Wholesale Enquiry */}
             <Link
               href="/enquiry"
               className="hidden rounded-lg bg-red-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-red-700 sm:inline-flex"
@@ -75,6 +87,7 @@ export default function Header() {
               Wholesale Enquiry
             </Link>
 
+            {/* WhatsApp */}
             <a
               href="https://wa.me/919219495647"
               target="_blank"
@@ -119,6 +132,14 @@ export default function Header() {
             className="shrink-0 text-xs font-semibold text-red-600"
           >
             Enquiry
+          </Link>
+
+          {/* Mobile Admin Login */}
+          <Link
+            href="/admin/login"
+            className="shrink-0 text-xs font-bold text-blue-700"
+          >
+            Admin Login
           </Link>
         </nav>
       </div>
