@@ -99,27 +99,64 @@ export default function ProductsListingClient({
           });
 
         const normalizedProducts: Product[] =
-          firestoreProducts.map((product) => ({
-            id: product.id,
-            name: product.name || "",
-            slug: product.slug || product.id,
-            category: product.category || "",
-            subcategory: product.subcategory || "",
-            description: product.description || "",
-            image:
-              product.image ||
-              product.images?.[0] ||
-              "",
-            images: product.images || [],
-            sizes: product.sizes || [],
-            colors: product.colors || [],
-            fabric: product.fabric || "",
-            minimumOrder: product.minimumOrder || 0,
-            priceLabel: product.priceLabel || "",
-            featured: Boolean(product.featured),
-            available: product.available !== false,
-          }));
+  firestoreProducts.map((product) => {
+    const wholesalePrice = Number(
+      product.wholesalePrice ?? 0
+    );
 
+    const stock = Number(product.stock ?? 0);
+
+    return {
+      id: product.id,
+      name: product.name || "",
+      slug: product.slug || "",
+      category: product.category || "",
+      subcategory: product.subcategory || "",
+      description: product.description || "",
+
+      image: product.image || "",
+      images: Array.isArray(product.images)
+        ? product.images.filter(
+            (image): image is string =>
+              typeof image === "string"
+          )
+        : [],
+
+      sizes: Array.isArray(product.sizes)
+        ? product.sizes.filter(
+            (size): size is string =>
+              typeof size === "string"
+          )
+        : [],
+
+      colors: Array.isArray(product.colors)
+        ? product.colors.filter(
+            (color): color is string =>
+              typeof color === "string"
+          )
+        : [],
+
+      fabric: product.fabric || "",
+      minimumOrder: Number(product.minimumOrder ?? 1),
+
+      priceLabel:
+        product.priceLabel ||
+        (wholesalePrice > 0
+          ? `₹${wholesalePrice} / piece`
+          : "Contact for Price"),
+
+      wholesalePrice,
+      retailPrice: Number(product.retailPrice ?? 0),
+      stock,
+
+      featured: Boolean(product.featured),
+
+      available:
+        product.available !== undefined
+          ? Boolean(product.available)
+          : stock > 0,
+    };
+  });
         const filteredProducts = normalizedProducts.filter(
           (product) => {
             const categoryMatches = category
