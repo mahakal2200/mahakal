@@ -2,12 +2,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import type { ChangeEvent, FormEvent } from "react";
 
 const WHATSAPP_NUMBER = "919219495647";
 
-export default function EnquiryPage() {
+function EnquiryFormContent() {
   const searchParams = useSearchParams();
 
   const [formData, setFormData] = useState({
@@ -24,7 +25,7 @@ export default function EnquiryPage() {
   const [error, setError] = useState("");
 
   const handleChange = (
-    e: React.ChangeEvent<
+    e: ChangeEvent<
       HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
     >
   ) => {
@@ -36,7 +37,7 @@ export default function EnquiryPage() {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
 
@@ -80,7 +81,10 @@ Enquiry from Mahakal A To Z Website
             MAHAKAL <span className="text-red-500">A TO Z</span>
           </Link>
 
-          <Link href="/" className="text-sm text-gray-300 hover:text-white">
+          <Link
+            href="/"
+            className="text-sm text-gray-300 hover:text-white"
+          >
             ← Home
           </Link>
         </div>
@@ -106,9 +110,13 @@ Enquiry from Mahakal A To Z Website
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label htmlFor="name" className="mb-2 block text-sm font-semibold">
+                <label
+                  htmlFor="name"
+                  className="mb-2 block text-sm font-semibold"
+                >
                   Your Full Name *
                 </label>
+
                 <input
                   id="name"
                   name="name"
@@ -121,9 +129,13 @@ Enquiry from Mahakal A To Z Website
               </div>
 
               <div>
-                <label htmlFor="phone" className="mb-2 block text-sm font-semibold">
+                <label
+                  htmlFor="phone"
+                  className="mb-2 block text-sm font-semibold"
+                >
                   Mobile Number *
                 </label>
+
                 <input
                   id="phone"
                   name="phone"
@@ -140,9 +152,13 @@ Enquiry from Mahakal A To Z Website
               </div>
 
               <div>
-                <label htmlFor="businessName" className="mb-2 block text-sm font-semibold">
+                <label
+                  htmlFor="businessName"
+                  className="mb-2 block text-sm font-semibold"
+                >
                   Shop / Business Name *
                 </label>
+
                 <input
                   id="businessName"
                   name="businessName"
@@ -155,9 +171,13 @@ Enquiry from Mahakal A To Z Website
               </div>
 
               <div>
-                <label htmlFor="city" className="mb-2 block text-sm font-semibold">
+                <label
+                  htmlFor="city"
+                  className="mb-2 block text-sm font-semibold"
+                >
                   City / State *
                 </label>
+
                 <input
                   id="city"
                   name="city"
@@ -170,9 +190,13 @@ Enquiry from Mahakal A To Z Website
               </div>
 
               <div>
-                <label htmlFor="category" className="mb-2 block text-sm font-semibold">
+                <label
+                  htmlFor="category"
+                  className="mb-2 block text-sm font-semibold"
+                >
                   Product Category *
                 </label>
+
                 <select
                   id="category"
                   name="category"
@@ -185,11 +209,15 @@ Enquiry from Mahakal A To Z Website
                   <option value="Shirts">Shirts</option>
                   <option value="T-Shirts">T-Shirts</option>
                   <option value="Jeans">Jeans</option>
-                  <option value="Trousers & Pants">Trousers & Pants</option>
+                  <option value="Trousers & Pants">
+                    Trousers & Pants
+                  </option>
                   <option value="Ethnic Wear">Ethnic Wear</option>
                   <option value="Winter Wear">Winter Wear</option>
                   <option value="Sportswear">Sportswear</option>
-                  <option value="Suits & Blazers">Suits & Blazers</option>
+                  <option value="Suits & Blazers">
+                    Suits & Blazers
+                  </option>
                   <option value="Innerwear">Innerwear</option>
                   <option value="Nightwear">Nightwear</option>
                   <option value="Accessories">Accessories</option>
@@ -198,9 +226,13 @@ Enquiry from Mahakal A To Z Website
               </div>
 
               <div>
-                <label htmlFor="subcategory" className="mb-2 block text-sm font-semibold">
+                <label
+                  htmlFor="subcategory"
+                  className="mb-2 block text-sm font-semibold"
+                >
                   Product / Design Requirement
                 </label>
+
                 <input
                   id="subcategory"
                   name="subcategory"
@@ -212,9 +244,13 @@ Enquiry from Mahakal A To Z Website
               </div>
 
               <div>
-                <label htmlFor="quantity" className="mb-2 block text-sm font-semibold">
+                <label
+                  htmlFor="quantity"
+                  className="mb-2 block text-sm font-semibold"
+                >
                   Approximate Quantity *
                 </label>
+
                 <select
                   id="quantity"
                   name="quantity"
@@ -233,9 +269,13 @@ Enquiry from Mahakal A To Z Website
               </div>
 
               <div>
-                <label htmlFor="message" className="mb-2 block text-sm font-semibold">
+                <label
+                  htmlFor="message"
+                  className="mb-2 block text-sm font-semibold"
+                >
                   Additional Requirements
                 </label>
+
                 <textarea
                   id="message"
                   name="message"
@@ -269,5 +309,21 @@ Enquiry from Mahakal A To Z Website
         </div>
       </section>
     </main>
+  );
+}
+
+export default function EnquiryPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center bg-gray-50">
+          <p className="text-gray-600">
+            Loading enquiry form...
+          </p>
+        </main>
+      }
+    >
+      <EnquiryFormContent />
+    </Suspense>
   );
 }
