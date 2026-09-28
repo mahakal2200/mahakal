@@ -143,7 +143,15 @@ type Product = {
   stock: number;
   image: string;
   images?: string[];
+  sizes?: string[];
+  colors?: string[];
+  fabric?: string;
+  minimumOrder?: number;
+  priceLabel?: string;
+  featured?: boolean;
+  available?: boolean;
   createdAt?: unknown;
+  updatedAt?: unknown;
 };
 
 const initialForm = {
@@ -155,6 +163,12 @@ const initialForm = {
   wholesalePrice: "",
   retailPrice: "",
   stock: "",
+  sizes: "",
+  colors: "",
+  fabric: "",
+  minimumOrder: "1",
+  featured: false,
+  available: true,
 };
 
 /* =========================================
@@ -263,7 +277,7 @@ export default function AdminProductsPage() {
 
   function updateField(
     field: keyof typeof initialForm,
-    value: string
+    value: string | boolean
   ) {
     setForm((previous) => ({
       ...previous,
@@ -356,6 +370,16 @@ export default function AdminProductsPage() {
       const wholesalePrice = Number(form.wholesalePrice);
       const retailPrice = Number(form.retailPrice);
       const stock = Number(form.stock);
+      const minimumOrder = Number(form.minimumOrder);
+      const sizes = form.sizes
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const colors = form.colors
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const fabric = form.fabric.trim();
 
       if (!name || !category || !subcategory) {
         throw new Error(
@@ -379,9 +403,11 @@ export default function AdminProductsPage() {
         !Number.isFinite(wholesalePrice) ||
         !Number.isFinite(retailPrice) ||
         !Number.isFinite(stock) ||
+        !Number.isFinite(minimumOrder) ||
         wholesalePrice < 0 ||
         retailPrice < 0 ||
-        stock < 0
+        stock < 0 ||
+        minimumOrder < 1
       ) {
         throw new Error(
           "Price और stock की सही value दर्ज करें।"
@@ -391,6 +417,12 @@ export default function AdminProductsPage() {
       if (!Number.isInteger(stock)) {
         throw new Error(
           "Stock quantity पूर्ण संख्या में दर्ज करें।"
+        );
+      }
+
+      if (!Number.isInteger(minimumOrder)) {
+        throw new Error(
+          "Minimum order quantity पूर्ण संख्या में दर्ज करें।"
         );
       }
 
@@ -419,6 +451,14 @@ export default function AdminProductsPage() {
         wholesalePrice,
         retailPrice,
         stock,
+
+        sizes,
+        colors,
+        fabric,
+        minimumOrder,
+        priceLabel: `₹${wholesalePrice} / piece`,
+        featured: form.featured,
+        available: form.available,
 
         image,
         images: [image],
@@ -510,6 +550,16 @@ export default function AdminProductsPage() {
       ),
 
       stock: String(product.stock ?? ""),
+      sizes: Array.isArray(product.sizes)
+        ? product.sizes.join(", ")
+        : "",
+      colors: Array.isArray(product.colors)
+        ? product.colors.join(", ")
+        : "",
+      fabric: product.fabric || "",
+      minimumOrder: String(product.minimumOrder ?? 1),
+      featured: Boolean(product.featured ?? false),
+      available: Boolean(product.available ?? true),
     });
 
     setImageFile(null);
@@ -919,6 +969,86 @@ export default function AdminProductsPage() {
                 />
               </div>
 
+            </div>
+
+            {/* PRODUCT ATTRIBUTES */}
+
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Available Sizes (comma separated)
+                </label>
+                <input
+                  value={form.sizes}
+                  onChange={(e) => updateField("sizes", e.target.value)}
+                  placeholder="S, M, L, XL, XXL"
+                  className="w-full rounded-lg border px-4 py-3 outline-none focus:border-black"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Available Colors (comma separated)
+                </label>
+                <input
+                  value={form.colors}
+                  onChange={(e) => updateField("colors", e.target.value)}
+                  placeholder="Black, White, Navy Blue"
+                  className="w-full rounded-lg border px-4 py-3 outline-none focus:border-black"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Fabric / Material
+                </label>
+                <input
+                  value={form.fabric}
+                  onChange={(e) => updateField("fabric", e.target.value)}
+                  placeholder="Cotton, Lycra, Denim..."
+                  className="w-full rounded-lg border px-4 py-3 outline-none focus:border-black"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">
+                  Minimum Order Quantity (pieces) *
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  required
+                  value={form.minimumOrder}
+                  onChange={(e) =>
+                    updateField("minimumOrder", e.target.value)
+                  }
+                  placeholder="1"
+                  className="w-full rounded-lg border px-4 py-3 outline-none focus:border-black"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-6 rounded-lg border bg-gray-50 p-4">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={form.featured}
+                  onChange={(e) => updateField("featured", e.target.checked)}
+                  className="h-4 w-4"
+                />
+                Featured Product
+              </label>
+
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={form.available}
+                  onChange={(e) => updateField("available", e.target.checked)}
+                  className="h-4 w-4"
+                />
+                Available for Enquiry
+              </label>
             </div>
 
             {/* DESCRIPTION */}
