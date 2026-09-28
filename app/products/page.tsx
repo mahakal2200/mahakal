@@ -1,10 +1,6 @@
 
 import Link from "next/link";
-import ProductCard from "@/components/ProductCard";
-import {
-  getAllProducts,
-  getProductsByCategory,
-} from "@/lib/products";
+import ProductsListingClient from "@/components/ProductsListingClient";
 
 type ProductsPageProps = {
   searchParams: Promise<{
@@ -40,12 +36,6 @@ export default async function ProductsPage({
 
   const category = params.category || "";
   const subcategory = params.subcategory || "";
-
-  const allProducts = getAllProducts();
-
-  const filteredProducts = category
-    ? getProductsByCategory(category, subcategory || undefined)
-    : allProducts;
 
   const heading = subcategory
     ? subcategory
@@ -98,7 +88,7 @@ export default async function ProductsPage({
             </h2>
 
             <p className="mt-2 text-sm text-gray-500">
-              {filteredProducts.length} products available
+              Products from our current wholesale collection
             </p>
           </div>
 
@@ -112,50 +102,42 @@ export default async function ProductsPage({
           )}
         </div>
 
-        {filteredProducts.length > 0 ? (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filteredProducts.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-              />
-            ))}
+        <ProductsListingClient
+          category={category}
+          subcategory={subcategory}
+        />
+
+        {/* Enquiry CTA */}
+        <div className="mt-12 rounded-2xl bg-white p-6 text-center shadow-sm sm:p-10">
+          <h2 className="text-xl font-extrabold text-gray-900 sm:text-2xl">
+            Looking for a particular wholesale design?
+          </h2>
+
+          <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-gray-600">
+            Contact Mahakal A To Z for current designs, bulk quantities,
+            availability and wholesale pricing.
+          </p>
+
+          <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+            <Link
+              href={`/enquiry?category=${encodeURIComponent(
+                category || "Mens Wear"
+              )}&subcategory=${encodeURIComponent(subcategory)}`}
+              className="rounded-lg bg-red-600 px-7 py-3 font-bold text-white hover:bg-red-700"
+            >
+              Send Wholesale Enquiry
+            </Link>
+
+            <a
+              href="https://wa.me/919219495647"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg border border-green-600 px-7 py-3 font-bold text-green-700 hover:bg-green-50"
+            >
+              WhatsApp Us
+            </a>
           </div>
-        ) : (
-          <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-5 py-16 text-center">
-            <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-red-50 text-4xl">
-              👔
-            </div>
-
-            <h3 className="text-xl font-bold text-gray-900">
-              No Products Available
-            </h3>
-
-            <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-gray-500">
-              {category
-                ? `Our ${heading} collection is being updated. Contact us for current stock and wholesale prices.`
-                : "Our wholesale collection is being updated. Please contact us for current designs, availability and bulk pricing."}
-            </p>
-
-            <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
-              <Link
-                href={`/enquiry?category=${encodeURIComponent(
-                  category || "Mens Wear"
-                )}&subcategory=${encodeURIComponent(subcategory)}`}
-                className="rounded-lg bg-red-600 px-7 py-3 font-bold text-white hover:bg-red-700"
-              >
-                Send Wholesale Enquiry
-              </Link>
-
-              <Link
-                href="/"
-                className="rounded-lg border border-gray-300 px-7 py-3 font-semibold text-gray-800 hover:bg-gray-100"
-              >
-                Browse Categories
-              </Link>
-            </div>
-          </div>
-        )}
+        </div>
       </section>
     </main>
   );
