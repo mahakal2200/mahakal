@@ -1,6 +1,8 @@
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import ProductCard from "@/components/ProductCard";
+import { getProductsByCategory } from "@/lib/products";
 
 const categories: Record<
   string,
@@ -11,14 +13,12 @@ const categories: Record<
   }
 > = {
   shirts: {
-    name: "Men's Shirts",
-    description:
-      "Explore formal, casual and other men's shirt collections for wholesale enquiries.",
+    name: "Shirts",
+    description: "Wholesale formal, casual and party wear shirts for men.",
     subcategories: [
       "Formal Shirts",
       "Casual Shirts",
       "Printed Shirts",
-      "Checks Shirts",
       "Linen Shirts",
       "Denim Shirts",
       "Full Sleeve Shirts",
@@ -27,145 +27,126 @@ const categories: Record<
   },
 
   "t-shirts": {
-    name: "Men's T-Shirts",
-    description:
-      "Explore men's T-shirt collections for retailers and bulk buyers.",
+    name: "T-Shirts",
+    description: "Explore wholesale men's T-shirts in different styles.",
     subcategories: [
       "Round Neck T-Shirts",
       "Polo T-Shirts",
       "Oversized T-Shirts",
       "Printed T-Shirts",
       "Plain T-Shirts",
-      "Full Sleeve T-Shirts",
       "Sports T-Shirts",
     ],
   },
 
   jeans: {
-    name: "Men's Jeans",
-    description:
-      "Browse denim styles and submit your wholesale requirements.",
+    name: "Jeans",
+    description: "Wholesale men's denim jeans in various fits and washes.",
     subcategories: [
       "Slim Fit Jeans",
       "Regular Fit Jeans",
-      "Skinny Fit Jeans",
       "Baggy Jeans",
       "Straight Fit Jeans",
-      "Stretch Jeans",
       "Cargo Jeans",
+      "Ripped Jeans",
     ],
   },
 
-  trousers: {
-    name: "Men's Trousers & Pants",
-    description:
-      "Wholesale trousers and pants for men's clothing retailers.",
+  "trousers-pants": {
+    name: "Trousers & Pants",
+    description: "Wholesale formal and casual trousers for men's wear shops.",
     subcategories: [
       "Formal Trousers",
-      "Casual Trousers",
-      "Chinos",
+      "Casual Pants",
       "Cargo Pants",
-      "Joggers",
-      "Cotton Pants",
-      "Linen Pants",
+      "Chinos",
+      "Track Pants",
+      "Cotton Trousers",
     ],
   },
 
   "ethnic-wear": {
-    name: "Men's Ethnic Wear",
-    description:
-      "Explore traditional and festive men's clothing collections.",
+    name: "Ethnic Wear",
+    description: "Wholesale traditional and ethnic clothing for men.",
     subcategories: [
-      "Men's Kurtas",
-      "Kurta Pajama",
-      "Pathani Suits",
+      "Kurtas",
+      "Kurta Pajama Sets",
       "Nehru Jackets",
-      "Festive Wear",
-      "Wedding Wear",
+      "Pathani Suits",
+      "Sherwanis",
     ],
   },
 
   "winter-wear": {
-    name: "Men's Winter Wear",
-    description:
-      "Wholesale winter clothing collections for retailers.",
+    name: "Winter Wear",
+    description: "Wholesale men's winter clothing and seasonal collections.",
     subcategories: [
       "Jackets",
       "Hoodies",
       "Sweatshirts",
       "Sweaters",
-      "Winter Coats",
-      "Thermal Wear",
+      "Thermals",
     ],
   },
 
   sportswear: {
-    name: "Men's Sportswear",
-    description:
-      "Sportswear and comfortable clothing for bulk buyers.",
+    name: "Sportswear",
+    description: "Wholesale sportswear and activewear for men.",
     subcategories: [
-      "Track Pants",
       "Track Suits",
-      "Sports Shorts",
-      "Gym Wear",
       "Sports T-Shirts",
-      "Lower Sets",
+      "Gym Wear",
+      "Track Pants",
+      "Sports Shorts",
     ],
   },
 
   "suits-blazers": {
-    name: "Men's Suits & Blazers",
-    description:
-      "Formal and occasion wear for men's clothing stores.",
+    name: "Suits & Blazers",
+    description: "Wholesale men's formal suits and blazers.",
     subcategories: [
       "Blazers",
       "Formal Suits",
       "Waistcoats",
       "Wedding Suits",
-      "Party Wear Suits",
     ],
   },
 
   innerwear: {
-    name: "Men's Innerwear",
-    description:
-      "Men's innerwear collections for wholesale enquiries.",
+    name: "Innerwear",
+    description: "Wholesale men's innerwear and essential clothing.",
     subcategories: [
       "Vests",
       "Briefs",
       "Boxers",
-      "Innerwear Sets",
+      "Trunks",
     ],
   },
 
   nightwear: {
-    name: "Men's Nightwear",
-    description:
-      "Nightwear and comfortable clothing for retailers.",
+    name: "Nightwear",
+    description: "Wholesale men's nightwear and comfortable sleepwear.",
     subcategories: [
       "Night Suits",
-      "Pajamas",
       "Night Shorts",
-      "Cotton Nightwear",
+      "Pyjamas",
     ],
   },
 
   accessories: {
-    name: "Men's Accessories",
-    description:
-      "Men's fashion accessories for wholesale buyers.",
+    name: "Accessories",
+    description: "Wholesale men's fashion accessories.",
     subcategories: [
       "Belts",
-      "Socks",
-      "Caps",
       "Wallets",
-      "Handkerchiefs",
+      "Caps",
+      "Socks",
       "Ties",
     ],
   },
 };
 
-type PageProps = {
+type CategoryPageProps = {
   params: Promise<{
     slug: string;
   }>;
@@ -179,7 +160,7 @@ export function generateStaticParams() {
 
 export async function generateMetadata({
   params,
-}: PageProps) {
+}: CategoryPageProps) {
   const { slug } = await params;
   const category = categories[slug];
 
@@ -197,7 +178,7 @@ export async function generateMetadata({
 
 export default async function CategoryPage({
   params,
-}: PageProps) {
+}: CategoryPageProps) {
   const { slug } = await params;
   const category = categories[slug];
 
@@ -205,64 +186,35 @@ export default async function CategoryPage({
     notFound();
   }
 
+  const categoryProducts = getProductsByCategory(category.name);
+
   return (
-    <main className="min-h-screen bg-gray-50 text-gray-900">
-      {/* Header */}
-      <header className="border-b bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
-          <Link href="/" className="shrink-0">
-            <h1 className="text-xl font-black text-red-700 sm:text-2xl">
-              MAHAKAL A TO Z
-            </h1>
-            <p className="text-xs text-gray-500">
-              MEN&apos;S WEAR WHOLESALE
-            </p>
-          </Link>
-
+    <main className="min-h-screen bg-gray-50">
+      {/* Hero */}
+      <section className="bg-black px-4 py-12 text-white sm:py-16">
+        <div className="mx-auto max-w-7xl">
           <Link
-            href="/enquiry"
-            className="rounded-lg bg-red-700 px-4 py-3 text-sm font-bold text-white hover:bg-red-800"
+            href="/"
+            className="mb-6 inline-block text-sm text-gray-300 hover:text-white"
           >
-            Enquire Now
-          </Link>
-        </div>
-      </header>
-
-      {/* Breadcrumb */}
-      <div className="mx-auto max-w-7xl px-4 pt-6">
-        <nav className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
-          <Link href="/" className="hover:text-red-700">
-            Home
+            ← Back to Home
           </Link>
 
-          <span>/</span>
-
-          <span className="font-medium text-gray-900">
-            {category.name}
-          </span>
-        </nav>
-      </div>
-
-      {/* Category Heading */}
-      <section className="mx-auto max-w-7xl px-4 py-10">
-        <div className="rounded-2xl bg-gray-950 px-6 py-10 text-white sm:px-10">
           <p className="text-sm font-bold uppercase tracking-widest text-red-400">
             Mahakal A To Z Wholesale
           </p>
 
-          <h2 className="mt-4 text-3xl font-black sm:text-5xl">
-            {category.name}
-          </h2>
+          <h1 className="mt-4 text-3xl font-extrabold sm:text-5xl">
+            Men's {category.name}
+          </h1>
 
           <p className="mt-4 max-w-2xl leading-7 text-gray-300">
             {category.description}
           </p>
 
           <Link
-            href={`/enquiry?category=${encodeURIComponent(
-              category.name
-            )}`}
-            className="mt-7 inline-flex rounded-lg bg-red-700 px-6 py-3.5 font-bold text-white hover:bg-red-800"
+            href={`/enquiry?category=${encodeURIComponent(category.name)}`}
+            className="mt-7 inline-flex rounded-lg bg-red-600 px-7 py-3 font-bold text-white transition hover:bg-red-700"
           >
             Enquire for Wholesale Rates
           </Link>
@@ -270,89 +222,81 @@ export default async function CategoryPage({
       </section>
 
       {/* Subcategories */}
-      <section className="mx-auto max-w-7xl px-4 pb-16">
-        <div className="mb-8">
-          <h3 className="text-2xl font-black sm:text-3xl">
-            Explore Subcategories
-          </h3>
+      <section className="mx-auto max-w-7xl px-4 py-12">
+        <h2 className="text-2xl font-extrabold text-gray-900">
+          Browse {category.name} Types
+        </h2>
 
-          <p className="mt-2 text-gray-600">
-            Select a subcategory to explore available products.
-          </p>
-        </div>
+        <p className="mt-2 text-sm text-gray-500">
+          Select a type to explore the collection.
+        </p>
 
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {category.subcategories.map((subcategory) => (
             <Link
               key={subcategory}
               href={`/products?category=${encodeURIComponent(
                 category.name
-              )}&subcategory=${encodeURIComponent(
-                subcategory
-              )}`}
-              className="group rounded-xl border border-gray-200 bg-white p-5 transition hover:-translate-y-1 hover:border-red-300 hover:shadow-lg sm:p-6"
+              )}&subcategory=${encodeURIComponent(subcategory)}`}
+              className="rounded-xl border border-gray-200 bg-white p-4 text-sm font-semibold text-gray-800 transition hover:border-red-500 hover:bg-red-50 hover:text-red-600"
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-50 text-2xl">
-                👔
-              </div>
-
-              <h4 className="mt-4 font-bold group-hover:text-red-700">
-                {subcategory}
-              </h4>
-
-              <p className="mt-2 text-sm text-gray-500">
-                View available products
-              </p>
-
-              <span className="mt-4 inline-block text-sm font-bold text-red-700">
-                Explore →
-              </span>
+              {subcategory}
+              <span className="ml-2 text-red-500">→</span>
             </Link>
           ))}
         </div>
       </section>
 
-      {/* Wholesale Enquiry */}
-      <section className="bg-red-700 px-4 py-12 text-white">
-        <div className="mx-auto max-w-7xl text-center">
-          <h3 className="text-2xl font-black sm:text-3xl">
-            Need Wholesale Prices?
-          </h3>
+      {/* Actual Products */}
+      <section className="mx-auto max-w-7xl px-4 pb-16">
+        <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-extrabold text-gray-900">
+              Available Products
+            </h2>
 
-          <p className="mx-auto mt-3 max-w-2xl text-red-100">
-            Tell us your required products and quantities.
-            Our team will contact you to discuss wholesale
-            rates, availability and dispatch.
-          </p>
+            <p className="mt-2 text-sm text-gray-500">
+              {categoryProducts.length} products available
+            </p>
+          </div>
 
           <Link
-            href={`/enquiry?category=${encodeURIComponent(
-              category.name
-            )}`}
-            className="mt-6 inline-block rounded-lg bg-white px-7 py-3.5 font-bold text-red-700 hover:bg-red-50"
+            href={`/enquiry?category=${encodeURIComponent(category.name)}`}
+            className="rounded-lg bg-red-600 px-5 py-3 text-sm font-bold text-white hover:bg-red-700"
           >
-            Submit Enquiry
+            Bulk Order Enquiry
           </Link>
         </div>
+
+        {categoryProducts.length > 0 ? (
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {categoryProducts.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-5 py-14 text-center">
+            <div className="mb-4 text-5xl">👔</div>
+
+            <h3 className="text-xl font-bold text-gray-900">
+              Products Coming Soon
+            </h3>
+
+            <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-gray-500">
+              Our {category.name.toLowerCase()} collection is being updated.
+              Contact us directly for current designs, stock and wholesale
+              pricing.
+            </p>
+
+            <Link
+              href={`/enquiry?category=${encodeURIComponent(category.name)}`}
+              className="mt-6 inline-flex rounded-lg bg-red-600 px-7 py-3 font-bold text-white hover:bg-red-700"
+            >
+              Enquire Now
+            </Link>
+          </div>
+        )}
       </section>
-
-      {/* Footer */}
-      <footer className="bg-gray-950 px-4 py-8 text-center text-sm text-gray-400">
-        <Link
-          href="/"
-          className="font-bold text-white hover:text-red-400"
-        >
-          MAHAKAL A TO Z
-        </Link>
-
-        <p className="mt-2">
-          Men&apos;s Wear Wholesale & Bulk Supply
-        </p>
-
-        <p className="mt-4 text-xs">
-          © {new Date().getFullYear()} Mahakal A To Z. All rights reserved.
-        </p>
-      </footer>
     </main>
   );
 }
