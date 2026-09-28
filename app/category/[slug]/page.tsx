@@ -1,8 +1,7 @@
-
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import ProductCard from "@/components/ProductCard";
-import { getProductsByCategory } from "@/lib/products";
+import type { Metadata } from "next";
+import CategoryProductsClient from "@/components/CategoryProductsClient";
 
 const categories: Record<
   string,
@@ -14,7 +13,8 @@ const categories: Record<
 > = {
   shirts: {
     name: "Shirts",
-    description: "Wholesale formal, casual and party wear shirts for men.",
+    description:
+      "Wholesale formal, casual and party wear shirts for men.",
     subcategories: [
       "Formal Shirts",
       "Casual Shirts",
@@ -28,7 +28,8 @@ const categories: Record<
 
   "t-shirts": {
     name: "T-Shirts",
-    description: "Explore wholesale men's T-shirts in different styles.",
+    description:
+      "Explore wholesale men's T-shirts in different styles.",
     subcategories: [
       "Round Neck T-Shirts",
       "Polo T-Shirts",
@@ -41,7 +42,8 @@ const categories: Record<
 
   jeans: {
     name: "Jeans",
-    description: "Wholesale men's denim jeans in various fits and washes.",
+    description:
+      "Wholesale men's denim jeans in various fits and washes.",
     subcategories: [
       "Slim Fit Jeans",
       "Regular Fit Jeans",
@@ -54,7 +56,8 @@ const categories: Record<
 
   "trousers-pants": {
     name: "Trousers & Pants",
-    description: "Wholesale formal and casual trousers for men's wear shops.",
+    description:
+      "Wholesale formal and casual trousers for men's wear shops.",
     subcategories: [
       "Formal Trousers",
       "Casual Pants",
@@ -67,7 +70,8 @@ const categories: Record<
 
   "ethnic-wear": {
     name: "Ethnic Wear",
-    description: "Wholesale traditional and ethnic clothing for men.",
+    description:
+      "Wholesale traditional and ethnic clothing for men.",
     subcategories: [
       "Kurtas",
       "Kurta Pajama Sets",
@@ -79,7 +83,8 @@ const categories: Record<
 
   "winter-wear": {
     name: "Winter Wear",
-    description: "Wholesale men's winter clothing and seasonal collections.",
+    description:
+      "Wholesale men's winter clothing and seasonal collections.",
     subcategories: [
       "Jackets",
       "Hoodies",
@@ -91,7 +96,8 @@ const categories: Record<
 
   sportswear: {
     name: "Sportswear",
-    description: "Wholesale sportswear and activewear for men.",
+    description:
+      "Wholesale sportswear and activewear for men.",
     subcategories: [
       "Track Suits",
       "Sports T-Shirts",
@@ -103,7 +109,8 @@ const categories: Record<
 
   "suits-blazers": {
     name: "Suits & Blazers",
-    description: "Wholesale men's formal suits and blazers.",
+    description:
+      "Wholesale men's formal suits and blazers.",
     subcategories: [
       "Blazers",
       "Formal Suits",
@@ -114,7 +121,8 @@ const categories: Record<
 
   innerwear: {
     name: "Innerwear",
-    description: "Wholesale men's innerwear and essential clothing.",
+    description:
+      "Wholesale men's innerwear and essential clothing.",
     subcategories: [
       "Vests",
       "Briefs",
@@ -125,7 +133,8 @@ const categories: Record<
 
   nightwear: {
     name: "Nightwear",
-    description: "Wholesale men's nightwear and comfortable sleepwear.",
+    description:
+      "Wholesale men's nightwear and comfortable sleepwear.",
     subcategories: [
       "Night Suits",
       "Night Shorts",
@@ -135,7 +144,8 @@ const categories: Record<
 
   accessories: {
     name: "Accessories",
-    description: "Wholesale men's fashion accessories.",
+    description:
+      "Wholesale men's fashion accessories.",
     subcategories: [
       "Belts",
       "Wallets",
@@ -160,7 +170,7 @@ export function generateStaticParams() {
 
 export async function generateMetadata({
   params,
-}: CategoryPageProps) {
+}: CategoryPageProps): Promise<Metadata> {
   const { slug } = await params;
   const category = categories[slug];
 
@@ -186,11 +196,9 @@ export default async function CategoryPage({
     notFound();
   }
 
-  const categoryProducts = getProductsByCategory(category.name);
-
   return (
     <main className="min-h-screen bg-gray-50">
-      {/* Hero */}
+      {/* Hero Section */}
       <section className="bg-black px-4 py-12 text-white sm:py-16">
         <div className="mx-auto max-w-7xl">
           <Link
@@ -205,7 +213,7 @@ export default async function CategoryPage({
           </p>
 
           <h1 className="mt-4 text-3xl font-extrabold sm:text-5xl">
-            Men's {category.name}
+            Men&apos;s {category.name}
           </h1>
 
           <p className="mt-4 max-w-2xl leading-7 text-gray-300">
@@ -213,7 +221,9 @@ export default async function CategoryPage({
           </p>
 
           <Link
-            href={`/enquiry?category=${encodeURIComponent(category.name)}`}
+            href={`/enquiry?category=${encodeURIComponent(
+              category.name
+            )}`}
             className="mt-7 inline-flex rounded-lg bg-red-600 px-7 py-3 font-bold text-white transition hover:bg-red-700"
           >
             Enquire for Wholesale Rates
@@ -247,7 +257,7 @@ export default async function CategoryPage({
         </div>
       </section>
 
-      {/* Actual Products */}
+      {/* Firestore Products */}
       <section className="mx-auto max-w-7xl px-4 pb-16">
         <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -256,46 +266,21 @@ export default async function CategoryPage({
             </h2>
 
             <p className="mt-2 text-sm text-gray-500">
-              {categoryProducts.length} products available
+              Products listed in this category
             </p>
           </div>
 
           <Link
-            href={`/enquiry?category=${encodeURIComponent(category.name)}`}
+            href={`/enquiry?category=${encodeURIComponent(
+              category.name
+            )}`}
             className="rounded-lg bg-red-600 px-5 py-3 text-sm font-bold text-white hover:bg-red-700"
           >
             Bulk Order Enquiry
           </Link>
         </div>
 
-        {categoryProducts.length > 0 ? (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {categoryProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-5 py-14 text-center">
-            <div className="mb-4 text-5xl">👔</div>
-
-            <h3 className="text-xl font-bold text-gray-900">
-              Products Coming Soon
-            </h3>
-
-            <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-gray-500">
-              Our {category.name.toLowerCase()} collection is being updated.
-              Contact us directly for current designs, stock and wholesale
-              pricing.
-            </p>
-
-            <Link
-              href={`/enquiry?category=${encodeURIComponent(category.name)}`}
-              className="mt-6 inline-flex rounded-lg bg-red-600 px-7 py-3 font-bold text-white hover:bg-red-700"
-            >
-              Enquire Now
-            </Link>
-          </div>
-        )}
+        <CategoryProductsClient category={category.name} />
       </section>
     </main>
   );
