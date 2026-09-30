@@ -10,7 +10,7 @@ import {
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 
-const ADMIN_UID = "krycYafGxWcyghoeL4qIcvZAJjC3";
+const ADMIN_UID = "bWjzNK7gJbTrGr1Lvu8938WihZG2";
 
 export default function AdminLoginPage() {
   const router = useRouter();
