@@ -30,7 +30,7 @@ import {
 
 import { auth, db, storage } from "@/lib/firebase";
 
-const ADMIN_UID = "krycYafGxWcyghoeL4qIcvZAJjC3";
+const ADMIN_UID = "bWjzNK7gJbTrGr1Lvu8938WihZG2";
 
 /* =========================================
    CATEGORY AND SUBCATEGORY OPTIONS
