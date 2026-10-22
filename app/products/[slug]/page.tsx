@@ -8,22 +8,29 @@ type ProductPageProps = {
   }>;
 };
 
-// Products are fetched dynamically from Firestore on the client.
+// Product details are fetched dynamically from Firestore on the client.
 export const dynamic = "force-dynamic";
+
+function formatProductName(slug: string): string {
+  return decodeURIComponent(slug)
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
 
 export async function generateMetadata({
   params,
 }: ProductPageProps): Promise<Metadata> {
   const { slug } = await params;
-
-  const productName = decodeURIComponent(slug)
-    .replace(/-/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+  const productName = formatProductName(slug);
 
   return {
     title: `${productName} | Mahakal A To Z`,
     description:
-      `View wholesale ${productName} at Mahakal A To Z. Contact us for wholesale pricing, stock and bulk orders.`,
+      `Explore ${productName} at Mahakal A To Z. Check retail price, sizes, colours, stock availability and Cash on Delivery eligibility in Ghazipur.`,
+    robots: {
+      index: true,
+      follow: true,
+    },
   };
 }
 
