@@ -2,8 +2,8 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 
 function OrderConfirmation() {
   const searchParams = useSearchParams();
@@ -12,7 +12,7 @@ function OrderConfirmation() {
   return (
     <main className="flex min-h-[70vh] items-center justify-center bg-gray-50 px-4 py-12">
       <section className="w-full max-w-xl rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-3xl text-green-700">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-3xl font-bold text-green-700">
           ✓
         </div>
 
@@ -21,8 +21,7 @@ function OrderConfirmation() {
         </h1>
 
         <p className="mt-3 text-gray-600">
-          Aapka order request receive ho gaya hai. Payment delivery ke samay
-          Cash on Delivery ke through hoga.
+          Aapka Cash on Delivery order request receive ho gaya hai.
         </p>
 
         {orderId ? (
@@ -31,16 +30,26 @@ function OrderConfirmation() {
             <p className="mt-1 break-all font-bold text-gray-900">
               {orderId}
             </p>
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard?.writeText(orderId);
+              }}
+              className="mt-3 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+            >
+              Copy Order ID
+            </button>
           </div>
         ) : (
           <p className="mt-5 text-sm text-amber-700">
-            Order ID URL mein nahi mila. Order status confirm karne ke liye
-            support se sampark karein.
+            Order ID nahi mila. Apne order ki confirmation ke liye support se
+            sampark karein.
           </p>
         )}
 
         <p className="mt-5 text-sm text-gray-600">
-          Order abhi confirmation aur delivery assignment ke liye pending hai.
+          Order abhi processing ke liye pending hai. Payment delivery ke samay
+          hoga.
         </p>
 
         <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
