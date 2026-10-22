@@ -21,6 +21,12 @@ type CheckoutForm = {
   pinCode: string;
 };
 
+type Quote = {
+  deliveryCharge: number;
+  pricingMode: string;
+  currency: string;
+};
+
 function money(amount: number): string {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -36,6 +42,8 @@ export default function CheckoutPage() {
   const [ready, setReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [quoteError, setQuoteError] = useState("");
 
   const [form, setForm] = useState<CheckoutForm>({
     name: "",
@@ -52,7 +60,6 @@ export default function CheckoutPage() {
 
     refresh();
     setReady(true);
-
     window.addEventListener(CART_UPDATED_EVENT, refresh);
 
     return () => {
@@ -60,10 +67,72 @@ export default function CheckoutPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+
+    async function loadQuote() {
+      try {
+        setQuoteError("");
+
+        const response = await fetch("/api/orders/quote", {
+          cache: "no-store",
+        });
+
+        const data: unknown = await response.json();
+
+        if (
+          !response.ok ||
+          !data ||
+          typeof data !== "object" ||
+          !("deliveryCharge" in data) ||
+          typeof data.deliveryCharge !== "number" ||
+          !Number.isFinite(data.deliveryCharge) ||
+          data.deliveryCharge < 0
+        ) {
+          throw new Error("Delivery charge abhi load nahi ho paaya.");
+        }
+
+        if (active) {
+          setQuote({
+            deliveryCharge: data.deliveryCharge,
+            pricingMode:
+              "pricingMode" in data && typeof data.pricingMode === "string"
+                ? data.pricingMode
+                : "temporary_flat_rate",
+            currency:
+              "currency" in data && typeof data.currency === "string"
+                ? data.currency
+                : "INR",
+          });
+        }
+      } catch (err) {
+        if (active) {
+          setQuote(null);
+          setQuoteError(
+            err instanceof Error
+              ? err.message
+              : "Delivery charge load nahi ho paaya."
+          );
+        }
+      }
+    }
+
+    void loadQuote();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const subtotal = items.reduce(
     (total, item) => total + item.unitPrice * item.quantity,
     0
   );
+
+  const totalAmount =
+    quote === null
+      ? null
+      : Math.round((subtotal + quote.deliveryCharge) * 100) / 100;
 
   function updateField(field: keyof CheckoutForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -74,6 +143,11 @@ export default function CheckoutPage() {
     setError("");
 
     if (submitting) return;
+
+    if (!quote) {
+      setError("Delivery charge load nahi hua. Dobara try karein.");
+      return;
+    }
 
     if (items.length === 0) {
       setError("Aapka cart khaali hai. Pehle product add karein.");
@@ -158,7 +232,7 @@ export default function CheckoutPage() {
         throw new Error("Order confirmation receive nahi hua.");
       }
 
-      // Cart sirf successful order confirmation ke baad clear hoga.
+      // Use the amount returned by the server, not the browser calculation.
       clearCart();
       setItems([]);
 
@@ -226,10 +300,7 @@ export default function CheckoutPage() {
 
             <div className="mt-6 grid gap-5 sm:grid-cols-2">
               <div className="sm:col-span-2">
-                <label
-                  htmlFor="name"
-                  className="text-sm font-semibold text-gray-700"
-                >
+                <label htmlFor="name" className="text-sm font-semibold text-gray-700">
                   Full Name *
                 </label>
                 <input
@@ -245,10 +316,7 @@ export default function CheckoutPage() {
               </div>
 
               <div className="sm:col-span-2">
-                <label
-                  htmlFor="phone"
-                  className="text-sm font-semibold text-gray-700"
-                >
+                <label htmlFor="phone" className="text-sm font-semibold text-gray-700">
                   Mobile Number *
                 </label>
                 <input
@@ -260,10 +328,7 @@ export default function CheckoutPage() {
                   maxLength={10}
                   value={form.phone}
                   onChange={(e) =>
-                    updateField(
-                      "phone",
-                      e.target.value.replace(/\D/g, "").slice(0, 10)
-                    )
+                    updateField("phone", e.target.value.replace(/\D/g, "").slice(0, 10))
                   }
                   className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-red-500"
                   placeholder="10-digit mobile number"
@@ -271,10 +336,7 @@ export default function CheckoutPage() {
               </div>
 
               <div className="sm:col-span-2">
-                <label
-                  htmlFor="address"
-                  className="text-sm font-semibold text-gray-700"
-                >
+                <label htmlFor="address" className="text-sm font-semibold text-gray-700">
                   House Number, Street, Mohalla, Village *
                 </label>
                 <textarea
@@ -291,10 +353,7 @@ export default function CheckoutPage() {
               </div>
 
               <div className="sm:col-span-2">
-                <label
-                  htmlFor="landmark"
-                  className="text-sm font-semibold text-gray-700"
-                >
+                <label htmlFor="landmark" className="text-sm font-semibold text-gray-700">
                   Landmark (Optional)
                 </label>
                 <input
@@ -308,10 +367,7 @@ export default function CheckoutPage() {
               </div>
 
               <div>
-                <label
-                  htmlFor="city"
-                  className="text-sm font-semibold text-gray-700"
-                >
+                <label htmlFor="city" className="text-sm font-semibold text-gray-700">
                   City / Village *
                 </label>
                 <input
@@ -327,10 +383,7 @@ export default function CheckoutPage() {
               </div>
 
               <div>
-                <label
-                  htmlFor="district"
-                  className="text-sm font-semibold text-gray-700"
-                >
+                <label htmlFor="district" className="text-sm font-semibold text-gray-700">
                   District *
                 </label>
                 <input
@@ -344,10 +397,7 @@ export default function CheckoutPage() {
               </div>
 
               <div>
-                <label
-                  htmlFor="pinCode"
-                  className="text-sm font-semibold text-gray-700"
-                >
+                <label htmlFor="pinCode" className="text-sm font-semibold text-gray-700">
                   PIN Code *
                 </label>
                 <input
@@ -358,10 +408,7 @@ export default function CheckoutPage() {
                   maxLength={6}
                   value={form.pinCode}
                   onChange={(e) =>
-                    updateField(
-                      "pinCode",
-                      e.target.value.replace(/\D/g, "").slice(0, 6)
-                    )
+                    updateField("pinCode", e.target.value.replace(/\D/g, "").slice(0, 6))
                   }
                   className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-red-500"
                   placeholder="6-digit PIN"
@@ -370,47 +417,48 @@ export default function CheckoutPage() {
             </div>
 
             <div className="mt-8 rounded-xl border border-green-200 bg-green-50 p-4">
-              <p className="font-bold text-green-800">
-                Cash on Delivery (COD)
-              </p>
+              <p className="font-bold text-green-800">Cash on Delivery (COD)</p>
               <p className="mt-1 text-sm text-green-700">
-                Payment delivery ke samay hoga, agar aapke address par COD
-                service available hai.
+                Payment delivery ke samay hoga, agar aapke address par COD service available hai.
               </p>
             </div>
 
+            {quoteError && (
+              <p role="alert" className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+                {quoteError}
+              </p>
+            )}
+
             {error && (
-              <p
-                role="alert"
-                className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700"
-              >
+              <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
                 {error}
               </p>
             )}
 
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || !quote}
               className="mt-6 w-full rounded-xl bg-red-600 px-6 py-4 font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-400"
             >
-              {submitting ? "Processing..." : "Place COD Order"}
+              {submitting
+                ? "Processing..."
+                : !quote
+                  ? "Delivery Charge Loading..."
+                  : `Place COD Order · ${money(totalAmount ?? subtotal)}`}
             </button>
 
             <p className="mt-3 text-xs leading-5 text-gray-500">
-              Order place karne par aapki delivery details order processing
-              ke liye use hongi.
+              Delivery charge abhi temporary flat rate hai. Actual distance-based pricing baad mein add hogi.
             </p>
           </section>
 
           <aside className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
-            <h2 className="text-xl font-bold text-gray-900">
-              Order Summary
-            </h2>
+            <h2 className="text-xl font-bold text-gray-900">Order Summary</h2>
 
             <div className="mt-5 space-y-4">
               {items.map((item) => (
                 <div
-                  key={`${item.id}-${item.size ?? ""}-${item.color ?? ""}`}
+                  key={`${item.id}-${item.size}-${item.color}`}
                   className="flex gap-3"
                 >
                   <div className="h-16 w-14 shrink-0 overflow-hidden rounded-lg bg-gray-100">
@@ -424,9 +472,7 @@ export default function CheckoutPage() {
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-gray-900">
-                      {item.name}
-                    </p>
+                    <p className="font-semibold text-gray-900">{item.name}</p>
                     <p className="mt-1 text-xs text-gray-500">
                       Qty: {item.quantity}
                       {item.size ? ` · Size: ${item.size}` : ""}
@@ -449,20 +495,14 @@ export default function CheckoutPage() {
 
               <div className="flex justify-between gap-4 text-gray-600">
                 <span>Delivery Charges</span>
-                <span>To be confirmed</span>
+                <span>{quote ? money(quote.deliveryCharge) : "Loading..."}</span>
               </div>
 
               <div className="flex justify-between gap-4 border-t border-gray-200 pt-4 text-lg font-extrabold text-gray-900">
-                <span>Product Total</span>
-                <span>{money(subtotal)}</span>
+                <span>Total Payable</span>
+                <span>{totalAmount === null ? "—" : money(totalAmount)}</span>
               </div>
             </div>
-
-            <p className="mt-4 text-xs leading-5 text-gray-500">
-              Delivery charges abhi final total mein include nahi hain.
-              Order confirm karne se pehle delivery charges ka sahi calculation
-              server-side order API mein bhi implement karna zaroori hai.
-            </p>
           </aside>
         </form>
       </div>
