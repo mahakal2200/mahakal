@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   collection,
   getDocs,
@@ -10,32 +10,14 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import ProductCard from "@/components/ProductCard";
-import type { Product } from "@/lib/products";
+import {
+  normalizeProduct,
+  type Product,
+} from "@/lib/products";
 
 type Props = {
   category: string;
   subcategory: string;
-};
-
-type FirestoreProduct = {
-  id: string;
-  name?: string;
-  slug?: string;
-  category?: string;
-  subcategory?: string;
-  description?: string;
-  image?: string;
-  images?: string[];
-  sizes?: string[];
-  colors?: string[];
-  fabric?: string;
-  minimumOrder?: number;
-  priceLabel?: string;
-  wholesalePrice?: number;
-  retailPrice?: number;
-  stock?: number;
-  featured?: boolean;
-  available?: boolean;
 };
 
 export default function ProductsListingClient({
@@ -45,158 +27,73 @@ export default function ProductsListingClient({
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [retryCount, setRetryCount] = useState(0);
+
+  const loadProducts = useCallback(async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const productsQuery = query(
+        collection(db, "products"),
+        orderBy("createdAt", "desc")
+      );
+
+      const snapshot = await getDocs(productsQuery);
+
+      const normalizedProducts: Product[] = snapshot.docs.map(
+        (document) =>
+          normalizeProduct(
+            document.id,
+            document.data() as Record<string, unknown>
+          )
+      );
+
+      const filteredProducts = normalizedProducts.filter(
+        (product) => {
+          const categoryMatches = category
+            ? product.category.trim().toLowerCase() ===
+              category.trim().toLowerCase()
+            : true;
+
+          const subcategoryMatches = subcategory
+            ? product.subcategory.trim().toLowerCase() ===
+              subcategory.trim().toLowerCase()
+            : true;
+
+          return (
+            categoryMatches &&
+            subcategoryMatches &&
+            product.available &&
+            product.stock > 0
+          );
+        }
+      );
+
+      setProducts(filteredProducts);
+    } catch (err) {
+      console.error("Failed to load products:", err);
+      setError(
+        "Products load nahi ho paaye. Internet connection check karke dobara try karein."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [category, subcategory]);
 
   useEffect(() => {
-    async function loadProducts() {
-      setLoading(true);
-      setError("");
-
-      try {
-        const productsQuery = query(
-          collection(db, "products"),
-          orderBy("createdAt", "desc")
-        );
-
-        const snapshot = await getDocs(productsQuery);
-
-        const firestoreProducts: FirestoreProduct[] =
-          snapshot.docs.map((document) => {
-            const data = document.data();
-
-            return {
-              id: document.id,
-              name: data.name || "",
-              slug: data.slug || document.id,
-              category: data.category || "",
-              subcategory: data.subcategory || "",
-              description: data.description || "",
-              image: data.image || "",
-              images: Array.isArray(data.images)
-                ? data.images
-                : [],
-              sizes: Array.isArray(data.sizes)
-                ? data.sizes
-                : [],
-              colors: Array.isArray(data.colors)
-                ? data.colors
-                : [],
-              fabric: data.fabric || "",
-              minimumOrder: Number(data.minimumOrder || 0),
-              priceLabel:
-                data.priceLabel ||
-                (data.wholesalePrice
-                  ? `₹${data.wholesalePrice}`
-                  : "Contact for wholesale price"),
-              featured: Boolean(data.featured),
-              available:
-                data.available !== undefined
-                  ? Boolean(data.available)
-                  : Number(data.stock ?? 0) > 0,
-              wholesalePrice: Number(data.wholesalePrice || 0),
-              retailPrice: Number(data.retailPrice || 0),
-              stock: Number(data.stock || 0),
-            };
-          });
-
-        const normalizedProducts: Product[] =
-  firestoreProducts.map((product) => {
-    const wholesalePrice = Number(
-      product.wholesalePrice ?? 0
-    );
-
-    const stock = Number(product.stock ?? 0);
-
-    return {
-      id: product.id,
-      name: product.name || "",
-      slug: product.slug || "",
-      category: product.category || "",
-      subcategory: product.subcategory || "",
-      description: product.description || "",
-
-      image: product.image || "",
-      images: Array.isArray(product.images)
-        ? product.images.filter(
-            (image): image is string =>
-              typeof image === "string"
-          )
-        : [],
-
-      sizes: Array.isArray(product.sizes)
-        ? product.sizes.filter(
-            (size): size is string =>
-              typeof size === "string"
-          )
-        : [],
-
-      colors: Array.isArray(product.colors)
-        ? product.colors.filter(
-            (color): color is string =>
-              typeof color === "string"
-          )
-        : [],
-
-      fabric: product.fabric || "",
-      minimumOrder: Number(product.minimumOrder ?? 1),
-
-      priceLabel:
-        product.priceLabel ||
-        (wholesalePrice > 0
-          ? `₹${wholesalePrice} / piece`
-          : "Contact for Price"),
-
-      wholesalePrice,
-      retailPrice: Number(product.retailPrice ?? 0),
-      stock,
-
-      featured: Boolean(product.featured),
-
-      available:
-        product.available !== undefined
-          ? Boolean(product.available)
-          : stock > 0,
-    };
-  });
-        const filteredProducts = normalizedProducts.filter(
-          (product) => {
-            const categoryMatches = category
-              ? product.category.toLowerCase() ===
-                category.toLowerCase()
-              : true;
-
-            const subcategoryMatches = subcategory
-              ? product.subcategory.toLowerCase() ===
-                subcategory.toLowerCase()
-              : true;
-
-            return (
-              categoryMatches &&
-              subcategoryMatches &&
-              product.available
-            );
-          }
-        );
-
-        setProducts(filteredProducts);
-      } catch (err) {
-        console.error("Failed to load products:", err);
-        setError(
-          "Products load nahi ho paaye. Please refresh karke dobara try karein."
-        );
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadProducts();
-  }, [category, subcategory]);
+    void loadProducts();
+  }, [loadProducts, retryCount]);
 
   if (loading) {
     return (
-      <div className="rounded-2xl bg-white px-5 py-16 text-center">
+      <div
+        className="rounded-2xl bg-white px-5 py-16 text-center"
+        aria-live="polite"
+      >
         <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-red-600" />
         <p className="mt-4 text-sm font-medium text-gray-600">
-          Loading wholesale products...
+          Loading clothing products...
         </p>
       </div>
     );
@@ -206,8 +103,10 @@ export default function ProductsListingClient({
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-12 text-center">
         <p className="font-semibold text-red-700">{error}</p>
+
         <button
-          onClick={() => window.location.reload()}
+          type="button"
+          onClick={() => setRetryCount((count) => count + 1)}
           className="mt-5 rounded-lg bg-red-600 px-6 py-3 font-bold text-white hover:bg-red-700"
         >
           Retry
@@ -229,8 +128,8 @@ export default function ProductsListingClient({
 
         <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-gray-500">
           {category
-            ? `Our ${subcategory || category} collection is being updated. Contact us for current stock and wholesale prices.`
-            : "Our wholesale collection is being updated. Please contact us for current designs, availability and bulk pricing."}
+            ? `Abhi ${subcategory || category} mein koi available product nahi hai. Kripya baad mein dobara check karein.`
+            : "Abhi koi clothing product available nahi hai. Kripya baad mein dobara check karein."}
         </p>
       </div>
     );
