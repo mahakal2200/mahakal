@@ -7,6 +7,7 @@ import Link from "next/link";
 import {
   CART_UPDATED_EVENT,
   getCartItems,
+  clearCart,
   type CartItem,
 } from "@/lib/cart";
 
@@ -72,6 +73,8 @@ export default function CheckoutPage() {
     event.preventDefault();
     setError("");
 
+    if (submitting) return;
+
     if (items.length === 0) {
       setError("Aapka cart khaali hai. Pehle product add karein.");
       return;
@@ -92,6 +95,16 @@ export default function CheckoutPage() {
 
     if (form.name.trim().length < 2) {
       setError("Apna poora naam enter karein.");
+      return;
+    }
+
+    if (form.address.trim().length < 5) {
+      setError("Complete delivery address enter karein.");
+      return;
+    }
+
+    if (!form.city.trim() || !form.district.trim()) {
+      setError("City aur district enter karein.");
       return;
     }
 
@@ -139,10 +152,15 @@ export default function CheckoutPage() {
         !result ||
         typeof result !== "object" ||
         !("orderId" in result) ||
-        typeof result.orderId !== "string"
+        typeof result.orderId !== "string" ||
+        !result.orderId.trim()
       ) {
         throw new Error("Order confirmation receive nahi hua.");
       }
+
+      // Cart sirf successful order confirmation ke baad clear hoga.
+      clearCart();
+      setItems([]);
 
       router.push(
         `/order-success?orderId=${encodeURIComponent(result.orderId)}`
@@ -178,7 +196,7 @@ export default function CheckoutPage() {
           </p>
           <Link
             href="/products"
-            className="mt-6 inline-flex rounded-lg bg-red-600 px-6 py-3 font-bold text-white"
+            className="mt-6 inline-flex rounded-lg bg-red-600 px-6 py-3 font-bold text-white hover:bg-red-700"
           >
             Browse Products
           </Link>
@@ -208,7 +226,10 @@ export default function CheckoutPage() {
 
             <div className="mt-6 grid gap-5 sm:grid-cols-2">
               <div className="sm:col-span-2">
-                <label htmlFor="name" className="text-sm font-semibold text-gray-700">
+                <label
+                  htmlFor="name"
+                  className="text-sm font-semibold text-gray-700"
+                >
                   Full Name *
                 </label>
                 <input
@@ -224,7 +245,10 @@ export default function CheckoutPage() {
               </div>
 
               <div className="sm:col-span-2">
-                <label htmlFor="phone" className="text-sm font-semibold text-gray-700">
+                <label
+                  htmlFor="phone"
+                  className="text-sm font-semibold text-gray-700"
+                >
                   Mobile Number *
                 </label>
                 <input
@@ -236,7 +260,10 @@ export default function CheckoutPage() {
                   maxLength={10}
                   value={form.phone}
                   onChange={(e) =>
-                    updateField("phone", e.target.value.replace(/\D/g, "").slice(0, 10))
+                    updateField(
+                      "phone",
+                      e.target.value.replace(/\D/g, "").slice(0, 10)
+                    )
                   }
                   className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-red-500"
                   placeholder="10-digit mobile number"
@@ -244,7 +271,10 @@ export default function CheckoutPage() {
               </div>
 
               <div className="sm:col-span-2">
-                <label htmlFor="address" className="text-sm font-semibold text-gray-700">
+                <label
+                  htmlFor="address"
+                  className="text-sm font-semibold text-gray-700"
+                >
                   House Number, Street, Mohalla, Village *
                 </label>
                 <textarea
@@ -261,7 +291,10 @@ export default function CheckoutPage() {
               </div>
 
               <div className="sm:col-span-2">
-                <label htmlFor="landmark" className="text-sm font-semibold text-gray-700">
+                <label
+                  htmlFor="landmark"
+                  className="text-sm font-semibold text-gray-700"
+                >
                   Landmark (Optional)
                 </label>
                 <input
@@ -275,7 +308,10 @@ export default function CheckoutPage() {
               </div>
 
               <div>
-                <label htmlFor="city" className="text-sm font-semibold text-gray-700">
+                <label
+                  htmlFor="city"
+                  className="text-sm font-semibold text-gray-700"
+                >
                   City / Village *
                 </label>
                 <input
@@ -291,7 +327,10 @@ export default function CheckoutPage() {
               </div>
 
               <div>
-                <label htmlFor="district" className="text-sm font-semibold text-gray-700">
+                <label
+                  htmlFor="district"
+                  className="text-sm font-semibold text-gray-700"
+                >
                   District *
                 </label>
                 <input
@@ -305,7 +344,10 @@ export default function CheckoutPage() {
               </div>
 
               <div>
-                <label htmlFor="pinCode" className="text-sm font-semibold text-gray-700">
+                <label
+                  htmlFor="pinCode"
+                  className="text-sm font-semibold text-gray-700"
+                >
                   PIN Code *
                 </label>
                 <input
@@ -316,7 +358,10 @@ export default function CheckoutPage() {
                   maxLength={6}
                   value={form.pinCode}
                   onChange={(e) =>
-                    updateField("pinCode", e.target.value.replace(/\D/g, "").slice(0, 6))
+                    updateField(
+                      "pinCode",
+                      e.target.value.replace(/\D/g, "").slice(0, 6)
+                    )
                   }
                   className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-red-500"
                   placeholder="6-digit PIN"
@@ -329,12 +374,16 @@ export default function CheckoutPage() {
                 Cash on Delivery (COD)
               </p>
               <p className="mt-1 text-sm text-green-700">
-                Payment delivery ke samay hoga, agar aapke address par COD service available hai.
+                Payment delivery ke samay hoga, agar aapke address par COD
+                service available hai.
               </p>
             </div>
 
             {error && (
-              <p role="alert" className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+              <p
+                role="alert"
+                className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700"
+              >
                 {error}
               </p>
             )}
@@ -348,7 +397,8 @@ export default function CheckoutPage() {
             </button>
 
             <p className="mt-3 text-xs leading-5 text-gray-500">
-              Order place karne par aapki delivery details order processing ke liye use hongi.
+              Order place karne par aapki delivery details order processing
+              ke liye use hongi.
             </p>
           </section>
 
@@ -360,7 +410,7 @@ export default function CheckoutPage() {
             <div className="mt-5 space-y-4">
               {items.map((item) => (
                 <div
-                  key={`${item.id}-${item.size}-${item.color}`}
+                  key={`${item.id}-${item.size ?? ""}-${item.color ?? ""}`}
                   className="flex gap-3"
                 >
                   <div className="h-16 w-14 shrink-0 overflow-hidden rounded-lg bg-gray-100">
@@ -374,7 +424,9 @@ export default function CheckoutPage() {
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-gray-900">{item.name}</p>
+                    <p className="font-semibold text-gray-900">
+                      {item.name}
+                    </p>
                     <p className="mt-1 text-xs text-gray-500">
                       Qty: {item.quantity}
                       {item.size ? ` · Size: ${item.size}` : ""}
@@ -394,15 +446,23 @@ export default function CheckoutPage() {
                 <span>Subtotal</span>
                 <span>{money(subtotal)}</span>
               </div>
+
               <div className="flex justify-between gap-4 text-gray-600">
                 <span>Delivery Charges</span>
                 <span>To be confirmed</span>
               </div>
+
               <div className="flex justify-between gap-4 border-t border-gray-200 pt-4 text-lg font-extrabold text-gray-900">
                 <span>Product Total</span>
                 <span>{money(subtotal)}</span>
               </div>
             </div>
+
+            <p className="mt-4 text-xs leading-5 text-gray-500">
+              Delivery charges abhi final total mein include nahi hain.
+              Order confirm karne se pehle delivery charges ka sahi calculation
+              server-side order API mein bhi implement karna zaroori hai.
+            </p>
           </aside>
         </form>
       </div>
