@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 type IncomingItem = {
   productId: string;
@@ -28,25 +29,39 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function text(value: unknown, maxLength: number): string | null {
   if (typeof value !== "string") return null;
-
   const result = value.trim();
-
-  if (!result || result.length > maxLength) return null;
-
-  return result;
+  return result && result.length <= maxLength ? result : null;
 }
 
 function stringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
 
-  return value.filter(
-    (item): item is string => typeof item === "string"
-  );
+function getDeliveryCharge(): number {
+  // Temporary flat charge until Maps/distance integration is added.
+  const configured = process.env.DELIVERY_FLAT_CHARGE;
+  const charge = configured === undefined ? 40 : Number(configured);
+
+  if (!Number.isFinite(charge) || charge < 0 || charge > 10000) {
+    throw new Error("INVALID_DELIVERY_CONFIGURATION");
+  }
+
+  return Math.round(charge * 100) / 100;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const body: unknown = await request.json();
+    let body: unknown;
+
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON request." },
+        { status: 400 }
+      );
+    }
 
     if (!isRecord(body) || !isRecord(body.customer)) {
       return NextResponse.json(
@@ -69,7 +84,8 @@ export async function POST(request: NextRequest) {
       phone: text(rawCustomer.phone, 10) ?? "",
       address: text(rawCustomer.address, 300) ?? "",
       landmark:
-        rawCustomer.landmark === ""
+        rawCustomer.landmark === "" ||
+        rawCustomer.landmark === undefined
           ? ""
           : text(rawCustomer.landmark, 150) ?? "",
       city: text(rawCustomer.city, 100) ?? "",
@@ -91,14 +107,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!Array.isArray(body.items) || body.items.length < 1 || body.items.length > 30) {
+    if (
+      !Array.isArray(body.items) ||
+      body.items.length < 1 ||
+      body.items.length > 30
+    ) {
       return NextResponse.json(
         { error: "Cart must contain between 1 and 30 items." },
         { status: 400 }
       );
     }
 
-    const items: IncomingItem[] = [];
+    const merged = new Map<string, IncomingItem>();
 
     for (const rawItem of body.items) {
       if (!isRecord(rawItem)) {
@@ -109,10 +129,8 @@ export async function POST(request: NextRequest) {
       }
 
       const productId = text(rawItem.productId, 150);
-      const size =
-        rawItem.size === "" ? "" : text(rawItem.size, 50);
-      const color =
-        rawItem.color === "" ? "" : text(rawItem.color, 80);
+      const size = rawItem.size === "" ? "" : text(rawItem.size, 50);
+      const color = rawItem.color === "" ? "" : text(rawItem.color, 80);
       const quantity = rawItem.quantity;
 
       if (
@@ -130,18 +148,27 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      items.push({ productId, quantity, size, color });
+      const key = JSON.stringify([productId, size, color]);
+      const previous = merged.get(key);
+      const combinedQuantity = (previous?.quantity ?? 0) + quantity;
+
+      if (combinedQuantity > 100) {
+        return NextResponse.json(
+          { error: "Maximum quantity per variant is 100." },
+          { status: 400 }
+        );
+      }
+
+      merged.set(key, {
+        productId,
+        quantity: combinedQuantity,
+        size,
+        color,
+      });
     }
 
-    const uniqueProductIds = new Set(items.map((item) => item.productId));
-
-    if (uniqueProductIds.size !== items.length) {
-      return NextResponse.json(
-        { error: "Duplicate cart entries found. Please review your cart." },
-        { status: 400 }
-      );
-    }
-
+    const items = Array.from(merged.values());
+    const deliveryCharge = getDeliveryCharge();
     const orderRef = adminDb.collection("orders").doc();
 
     const result = await adminDb.runTransaction(async (transaction) => {
@@ -149,8 +176,8 @@ export async function POST(request: NextRequest) {
         adminDb.collection("products").doc(item.productId)
       );
 
-      // Read all product documents before performing any writes.
-      const productSnapshots = await Promise.all(
+      // All reads must finish before transaction writes.
+      const snapshots = await Promise.all(
         productRefs.map((ref) => transaction.get(ref))
       );
 
@@ -166,31 +193,41 @@ export async function POST(request: NextRequest) {
         lineTotal: number;
       }> = [];
 
+      const quantityByProduct = new Map<string, number>();
       let subtotal = 0;
 
       for (let index = 0; index < items.length; index++) {
         const requested = items[index];
-        const snapshot = productSnapshots[index];
+        const snapshot = snapshots[index];
 
         if (!snapshot.exists) {
-          throw new Error(`PRODUCT_NOT_FOUND:${requested.productId}`);
+          throw new Error("PRODUCT_NOT_FOUND");
         }
 
         const product = snapshot.data()!;
-        const available =
-          product.available === undefined
-            ? Number(product.stock ?? 0) > 0
-            : product.available === true;
-
         const stock = Number(product.stock ?? 0);
         const unitPrice = Number(product.retailPrice ?? 0);
 
-        if (!available || !Number.isInteger(stock) || stock < requested.quantity) {
-          throw new Error(`INSUFFICIENT_STOCK:${requested.productId}`);
+        const available =
+          product.available === undefined
+            ? Number.isInteger(stock) && stock > 0
+            : product.available === true;
+
+        if (!available || !Number.isInteger(stock) || stock < 0) {
+          throw new Error("PRODUCT_UNAVAILABLE");
         }
 
+        const totalRequested =
+          (quantityByProduct.get(snapshot.id) ?? 0) + requested.quantity;
+
+        if (totalRequested > stock) {
+          throw new Error("INSUFFICIENT_STOCK");
+        }
+
+        quantityByProduct.set(snapshot.id, totalRequested);
+
         if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
-          throw new Error(`PRICE_UNAVAILABLE:${requested.productId}`);
+          throw new Error("PRICE_UNAVAILABLE");
         }
 
         const sizes = stringArray(product.sizes);
@@ -200,7 +237,7 @@ export async function POST(request: NextRequest) {
           (sizes.length > 0 && !sizes.includes(requested.size)) ||
           (colors.length > 0 && !colors.includes(requested.color))
         ) {
-          throw new Error(`INVALID_VARIANT:${requested.productId}`);
+          throw new Error("INVALID_VARIANT");
         }
 
         const name =
@@ -219,7 +256,9 @@ export async function POST(request: NextRequest) {
             ? product.image
             : images[0] ?? "";
 
-        const lineTotal = Math.round(unitPrice * requested.quantity * 100) / 100;
+        const lineTotal =
+          Math.round(unitPrice * requested.quantity * 100) / 100;
+
         subtotal = Math.round((subtotal + lineTotal) * 100) / 100;
 
         verifiedItems.push({
@@ -235,16 +274,20 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // All product reads are complete; writes can now begin.
-      for (let index = 0; index < items.length; index++) {
-        const requested = items[index];
-        const snapshot = productSnapshots[index];
+      const totalAmount =
+        Math.round((subtotal + deliveryCharge) * 100) / 100;
+
+      // Deduct stock once per product, across all variants.
+      for (const snapshot of snapshots) {
+        const quantity = quantityByProduct.get(snapshot.id) ?? 0;
+        if (quantity === 0) continue;
+
         const currentStock = Number(snapshot.data()?.stock ?? 0);
-        const remainingStock = currentStock - requested.quantity;
+        const remainingStock = currentStock - quantity;
 
         transaction.update(snapshot.ref, {
           stock: remainingStock,
-          ...(remainingStock === 0 ? { available: false } : {}),
+          available: remainingStock > 0,
           updatedAt: FieldValue.serverTimestamp(),
         });
       }
@@ -257,14 +300,23 @@ export async function POST(request: NextRequest) {
         paymentStatus: "pending",
         status: "pending",
         subtotal,
-        deliveryCharge: null,
-        totalAmount: null,
+        deliveryCharge,
+        deliveryDistanceKm: null,
+        deliveryPricingMode: "temporary_flat_rate",
+        totalAmount,
+        currency: "INR",
         deliveryStatus: "not_assigned",
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
 
-      return { orderId: orderRef.id };
+      return {
+        orderId: orderRef.id,
+        subtotal,
+        deliveryCharge,
+        totalAmount,
+        currency: "INR",
+      };
     });
 
     return NextResponse.json(result, { status: 201 });
@@ -272,31 +324,39 @@ export async function POST(request: NextRequest) {
     console.error("Create order failed:", error);
 
     if (error instanceof Error) {
-      if (error.message.startsWith("PRODUCT_NOT_FOUND:")) {
-        return NextResponse.json(
-          { error: "A product in your cart is no longer available." },
-          { status: 409 }
-        );
-      }
+      const messages: Record<string, { status: number; message: string }> = {
+        PRODUCT_NOT_FOUND: {
+          status: 409,
+          message: "A product in your cart is no longer available.",
+        },
+        PRODUCT_UNAVAILABLE: {
+          status: 409,
+          message: "A product is currently unavailable.",
+        },
+        INSUFFICIENT_STOCK: {
+          status: 409,
+          message: "Stock changed. Please update your cart and try again.",
+        },
+        PRICE_UNAVAILABLE: {
+          status: 409,
+          message: "A product price is unavailable. Please contact support.",
+        },
+        INVALID_VARIANT: {
+          status: 409,
+          message: "A selected size or colour is no longer available.",
+        },
+        INVALID_DELIVERY_CONFIGURATION: {
+          status: 503,
+          message: "Delivery charges are not configured correctly.",
+        },
+      };
 
-      if (error.message.startsWith("INSUFFICIENT_STOCK:")) {
-        return NextResponse.json(
-          { error: "Stock changed. Please update your cart and try again." },
-          { status: 409 }
-        );
-      }
+      const known = messages[error.message];
 
-      if (error.message.startsWith("PRICE_UNAVAILABLE:")) {
+      if (known) {
         return NextResponse.json(
-          { error: "A product price is unavailable. Please contact support." },
-          { status: 409 }
-        );
-      }
-
-      if (error.message.startsWith("INVALID_VARIANT:")) {
-        return NextResponse.json(
-          { error: "A selected size or colour is no longer available." },
-          { status: 409 }
+          { error: known.message },
+          { status: known.status }
         );
       }
     }
