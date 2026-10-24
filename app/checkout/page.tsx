@@ -1,15 +1,25 @@
 
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type FormEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+
 import {
   CART_UPDATED_EVENT,
   getCartItems,
   clearCart,
   type CartItem,
 } from "@/lib/cart";
+
+import SavedAddressSelector, {
+  type SavedAddress,
+} from "@/components/checkout/SavedAddressSelector";
 
 type CheckoutForm = {
   name: string;
@@ -18,6 +28,7 @@ type CheckoutForm = {
   landmark: string;
   city: string;
   district: string;
+  state: string;
   pinCode: string;
 };
 
@@ -25,6 +36,11 @@ type Quote = {
   deliveryCharge: number;
   pricingMode: string;
   currency: string;
+};
+
+type OrderResponse = {
+  orderId?: string;
+  error?: string;
 };
 
 function money(amount: number): string {
@@ -44,6 +60,7 @@ export default function CheckoutPage() {
   const [error, setError] = useState("");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteError, setQuoteError] = useState("");
+  const [selectedAddressId, setSelectedAddressId] = useState("");
 
   const [form, setForm] = useState<CheckoutForm>({
     name: "",
@@ -52,14 +69,17 @@ export default function CheckoutPage() {
     landmark: "",
     city: "",
     district: "Ghazipur",
+    state: "Uttar Pradesh",
     pinCode: "",
   });
 
+  // Load the existing cart.
   useEffect(() => {
     const refresh = () => setItems(getCartItems());
 
     refresh();
     setReady(true);
+
     window.addEventListener(CART_UPDATED_EVENT, refresh);
 
     return () => {
@@ -67,6 +87,7 @@ export default function CheckoutPage() {
     };
   }, []);
 
+  // Load the delivery quote.
   useEffect(() => {
     let active = true;
 
@@ -75,6 +96,7 @@ export default function CheckoutPage() {
         setQuoteError("");
 
         const response = await fetch("/api/orders/quote", {
+          method: "GET",
           cache: "no-store",
         });
 
@@ -89,14 +111,22 @@ export default function CheckoutPage() {
           !Number.isFinite(data.deliveryCharge) ||
           data.deliveryCharge < 0
         ) {
-          throw new Error("Delivery charge abhi load nahi ho paaya.");
+          throw new Error(
+            data &&
+              typeof data === "object" &&
+              "error" in data &&
+              typeof data.error === "string"
+              ? data.error
+              : "Delivery charge abhi load nahi ho paaya."
+          );
         }
 
         if (active) {
           setQuote({
             deliveryCharge: data.deliveryCharge,
             pricingMode:
-              "pricingMode" in data && typeof data.pricingMode === "string"
+              "pricingMode" in data &&
+              typeof data.pricingMode === "string"
                 ? data.pricingMode
                 : "temporary_flat_rate",
             currency:
@@ -124,6 +154,40 @@ export default function CheckoutPage() {
     };
   }, []);
 
+  // Select a saved address and populate the checkout form.
+  const handleSavedAddressSelect = useCallback(
+    (address: SavedAddress) => {
+      setSelectedAddressId(address.id);
+
+      setForm((current) => ({
+        ...current,
+        name: address.name,
+        phone: address.phone.replace(/\D/g, "").slice(-10),
+        address: [
+          address.addressLine1,
+          address.addressLine2,
+        ]
+          .filter(Boolean)
+          .join(", "),
+        landmark: "",
+        city: address.city,
+        state: address.state,
+        pinCode: address.pincode,
+      }));
+    },
+    []
+  );
+
+  function updateField(field: keyof CheckoutForm, value: string) {
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+
+    // Manual edits mean the form may no longer match the saved address.
+    setSelectedAddressId("");
+  }
+
   const subtotal = items.reduce(
     (total, item) => total + item.unitPrice * item.quantity,
     0
@@ -134,11 +198,9 @@ export default function CheckoutPage() {
       ? null
       : Math.round((subtotal + quote.deliveryCharge) * 100) / 100;
 
-  function updateField(field: keyof CheckoutForm, value: string) {
-    setForm((current) => ({ ...current, [field]: value }));
-  }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
     setError("");
 
@@ -154,21 +216,17 @@ export default function CheckoutPage() {
       return;
     }
 
-    const phone = form.phone.replace(/\D/g, "");
+    const name = form.name.trim();
+    const phone = form.phone.replace(/\D/g, "").slice(-10);
     const pinCode = form.pinCode.replace(/\D/g, "");
+
+    if (name.length < 2) {
+      setError("Apna poora naam enter karein.");
+      return;
+    }
 
     if (!/^[6-9]\d{9}$/.test(phone)) {
       setError("Valid 10-digit Indian mobile number enter karein.");
-      return;
-    }
-
-    if (!/^\d{6}$/.test(pinCode)) {
-      setError("Valid 6-digit PIN code enter karein.");
-      return;
-    }
-
-    if (form.name.trim().length < 2) {
-      setError("Apna poora naam enter karein.");
       return;
     }
 
@@ -182,20 +240,46 @@ export default function CheckoutPage() {
       return;
     }
 
+    if (!form.state.trim()) {
+      setError("State enter karein.");
+      return;
+    }
+
+    if (!/^\d{6}$/.test(pinCode)) {
+      setError("Valid 6-digit PIN code enter karein.");
+      return;
+    }
+
+    const validItems = items.every(
+      (item) =>
+        typeof item.id === "string" &&
+        item.id.trim().length > 0 &&
+        Number.isInteger(item.quantity) &&
+        item.quantity > 0
+    );
+
+    if (!validItems) {
+      setError("Cart mein invalid product details hain. Cart refresh karein.");
+      return;
+    }
+
     setSubmitting(true);
 
     try {
       const response = await fetch("/api/orders", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           customer: {
-            name: form.name.trim(),
+            name,
             phone,
             address: form.address.trim(),
             landmark: form.landmark.trim(),
             city: form.city.trim(),
             district: form.district.trim(),
+            state: form.state.trim(),
             pinCode,
           },
           paymentMethod: "COD",
@@ -229,10 +313,12 @@ export default function CheckoutPage() {
         typeof result.orderId !== "string" ||
         !result.orderId.trim()
       ) {
-        throw new Error("Order confirmation receive nahi hua.");
+        throw new Error(
+          "Order confirmation receive nahi hua. Apne orders check karein."
+        );
       }
 
-      // Use the amount returned by the server, not the browser calculation.
+      // Clear the cart only after the server confirms the order.
       clearCart();
       setItems([]);
 
@@ -265,9 +351,11 @@ export default function CheckoutPage() {
           <h1 className="text-2xl font-extrabold text-gray-900">
             Your cart is empty
           </h1>
+
           <p className="mt-3 text-gray-600">
             Checkout se pehle cart mein products add karein.
           </p>
+
           <Link
             href="/products"
             className="mt-6 inline-flex rounded-lg bg-red-600 px-6 py-3 font-bold text-white hover:bg-red-700"
@@ -285,6 +373,7 @@ export default function CheckoutPage() {
         <h1 className="text-3xl font-extrabold text-gray-900">
           Checkout
         </h1>
+
         <p className="mt-2 text-gray-600">
           Delivery details enter karein aur apna order review karein.
         </p>
@@ -298,27 +387,48 @@ export default function CheckoutPage() {
               Delivery Address
             </h2>
 
-            <div className="mt-6 grid gap-5 sm:grid-cols-2">
+            <div className="mt-5">
+              <SavedAddressSelector
+                onSelect={handleSavedAddressSelect}
+                selectedAddressId={selectedAddressId}
+              />
+            </div>
+
+            <p className="mt-6 text-sm text-gray-600">
+              Ya neeche apna delivery address enter karein.
+            </p>
+
+            <div className="mt-4 grid gap-5 sm:grid-cols-2">
               <div className="sm:col-span-2">
-                <label htmlFor="name" className="text-sm font-semibold text-gray-700">
+                <label
+                  htmlFor="name"
+                  className="text-sm font-semibold text-gray-700"
+                >
                   Full Name *
                 </label>
+
                 <input
                   id="name"
                   required
                   autoComplete="name"
                   maxLength={100}
                   value={form.name}
-                  onChange={(e) => updateField("name", e.target.value)}
+                  onChange={(e) =>
+                    updateField("name", e.target.value)
+                  }
                   className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-red-500"
                   placeholder="Customer ka naam"
                 />
               </div>
 
               <div className="sm:col-span-2">
-                <label htmlFor="phone" className="text-sm font-semibold text-gray-700">
+                <label
+                  htmlFor="phone"
+                  className="text-sm font-semibold text-gray-700"
+                >
                   Mobile Number *
                 </label>
+
                 <input
                   id="phone"
                   type="tel"
@@ -328,7 +438,10 @@ export default function CheckoutPage() {
                   maxLength={10}
                   value={form.phone}
                   onChange={(e) =>
-                    updateField("phone", e.target.value.replace(/\D/g, "").slice(0, 10))
+                    updateField(
+                      "phone",
+                      e.target.value.replace(/\D/g, "").slice(0, 10)
+                    )
                   }
                   className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-red-500"
                   placeholder="10-digit mobile number"
@@ -336,9 +449,13 @@ export default function CheckoutPage() {
               </div>
 
               <div className="sm:col-span-2">
-                <label htmlFor="address" className="text-sm font-semibold text-gray-700">
+                <label
+                  htmlFor="address"
+                  className="text-sm font-semibold text-gray-700"
+                >
                   House Number, Street, Mohalla, Village *
                 </label>
+
                 <textarea
                   id="address"
                   required
@@ -346,60 +463,107 @@ export default function CheckoutPage() {
                   maxLength={300}
                   rows={3}
                   value={form.address}
-                  onChange={(e) => updateField("address", e.target.value)}
+                  onChange={(e) =>
+                    updateField("address", e.target.value)
+                  }
                   className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-red-500"
                   placeholder="Complete delivery address"
                 />
               </div>
 
               <div className="sm:col-span-2">
-                <label htmlFor="landmark" className="text-sm font-semibold text-gray-700">
+                <label
+                  htmlFor="landmark"
+                  className="text-sm font-semibold text-gray-700"
+                >
                   Landmark (Optional)
                 </label>
+
                 <input
                   id="landmark"
                   maxLength={150}
                   value={form.landmark}
-                  onChange={(e) => updateField("landmark", e.target.value)}
+                  onChange={(e) =>
+                    updateField("landmark", e.target.value)
+                  }
                   className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-red-500"
                   placeholder="Nearby school, shop, etc."
                 />
               </div>
 
               <div>
-                <label htmlFor="city" className="text-sm font-semibold text-gray-700">
+                <label
+                  htmlFor="city"
+                  className="text-sm font-semibold text-gray-700"
+                >
                   City / Village *
                 </label>
+
                 <input
                   id="city"
                   required
                   autoComplete="address-level2"
                   maxLength={100}
                   value={form.city}
-                  onChange={(e) => updateField("city", e.target.value)}
+                  onChange={(e) =>
+                    updateField("city", e.target.value)
+                  }
                   className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-red-500"
                   placeholder="City or village"
                 />
               </div>
 
               <div>
-                <label htmlFor="district" className="text-sm font-semibold text-gray-700">
+                <label
+                  htmlFor="district"
+                  className="text-sm font-semibold text-gray-700"
+                >
                   District *
                 </label>
+
                 <input
                   id="district"
                   required
                   maxLength={100}
                   value={form.district}
-                  onChange={(e) => updateField("district", e.target.value)}
+                  onChange={(e) =>
+                    updateField("district", e.target.value)
+                  }
                   className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-red-500"
+                  placeholder="District"
                 />
               </div>
 
               <div>
-                <label htmlFor="pinCode" className="text-sm font-semibold text-gray-700">
+                <label
+                  htmlFor="state"
+                  className="text-sm font-semibold text-gray-700"
+                >
+                  State *
+                </label>
+
+                <input
+                  id="state"
+                  required
+                  maxLength={100}
+                  autoComplete="address-level1"
+                  value={form.state}
+                  onChange={(e) =>
+                    updateField("state", e.target.value)
+                  }
+                  className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-red-500"
+                  placeholder="State"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="pinCode"
+                  className="text-sm font-semibold text-gray-700"
+                >
                   PIN Code *
                 </label>
+
                 <input
                   id="pinCode"
                   required
@@ -408,7 +572,10 @@ export default function CheckoutPage() {
                   maxLength={6}
                   value={form.pinCode}
                   onChange={(e) =>
-                    updateField("pinCode", e.target.value.replace(/\D/g, "").slice(0, 6))
+                    updateField(
+                      "pinCode",
+                      e.target.value.replace(/\D/g, "").slice(0, 6)
+                    )
                   }
                   className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-red-500"
                   placeholder="6-digit PIN"
@@ -417,20 +584,30 @@ export default function CheckoutPage() {
             </div>
 
             <div className="mt-8 rounded-xl border border-green-200 bg-green-50 p-4">
-              <p className="font-bold text-green-800">Cash on Delivery (COD)</p>
+              <p className="font-bold text-green-800">
+                Cash on Delivery (COD)
+              </p>
+
               <p className="mt-1 text-sm text-green-700">
-                Payment delivery ke samay hoga, agar aapke address par COD service available hai.
+                Payment delivery ke samay hoga, agar aapke address par
+                COD service available hai.
               </p>
             </div>
 
             {quoteError && (
-              <p role="alert" className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+              <p
+                role="alert"
+                className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800"
+              >
                 {quoteError}
               </p>
             )}
 
             {error && (
-              <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+              <p
+                role="alert"
+                className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700"
+              >
                 {error}
               </p>
             )}
@@ -448,12 +625,16 @@ export default function CheckoutPage() {
             </button>
 
             <p className="mt-3 text-xs leading-5 text-gray-500">
-              Delivery charge abhi temporary flat rate hai. Actual distance-based pricing baad mein add hogi.
+              Delivery charge abhi quote API se aata hai. Actual
+              distance-based pricing aur final payable amount ko server
+              par validate karna zaroori hai.
             </p>
           </section>
 
           <aside className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
-            <h2 className="text-xl font-bold text-gray-900">Order Summary</h2>
+            <h2 className="text-xl font-bold text-gray-900">
+              Order Summary
+            </h2>
 
             <div className="mt-5 space-y-4">
               {items.map((item) => (
@@ -472,7 +653,10 @@ export default function CheckoutPage() {
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-gray-900">{item.name}</p>
+                    <p className="font-semibold text-gray-900">
+                      {item.name}
+                    </p>
+
                     <p className="mt-1 text-xs text-gray-500">
                       Qty: {item.quantity}
                       {item.size ? ` · Size: ${item.size}` : ""}
@@ -495,12 +679,18 @@ export default function CheckoutPage() {
 
               <div className="flex justify-between gap-4 text-gray-600">
                 <span>Delivery Charges</span>
-                <span>{quote ? money(quote.deliveryCharge) : "Loading..."}</span>
+                <span>
+                  {quote
+                    ? money(quote.deliveryCharge)
+                    : "Loading..."}
+                </span>
               </div>
 
               <div className="flex justify-between gap-4 border-t border-gray-200 pt-4 text-lg font-extrabold text-gray-900">
                 <span>Total Payable</span>
-                <span>{totalAmount === null ? "—" : money(totalAmount)}</span>
+                <span>
+                  {totalAmount === null ? "—" : money(totalAmount)}
+                </span>
               </div>
             </div>
           </aside>
