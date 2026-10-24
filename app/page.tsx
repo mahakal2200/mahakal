@@ -2,22 +2,88 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, limit } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import {
+  onAuthStateChanged,
+  signOut,
+  type User,
+} from "firebase/auth";
+import {
+  collection,
+  getDocs,
+  query,
+  limit,
+} from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
 
 const categories = [
-  { name: "Shirts", slug: "shirts", description: "Formal, casual, printed & checks", icon: "👔" },
-  { name: "T-Shirts", slug: "t-shirts", description: "Round neck, polo & oversized", icon: "👕" },
-  { name: "Jeans", slug: "jeans", description: "Slim fit, regular & baggy", icon: "👖" },
-{ name: "Trousers & Pants", slug: "trousers-pants", description: "Formal, chinos & cargo", icon: "🩳" },
-  { name: "Ethnic Wear", slug: "ethnic-wear", description: "Kurtas & festive collections", icon: "🥻" },
-  { name: "Winter Wear", slug: "winter-wear", description: "Jackets, hoodies & sweaters", icon: "🧥" },
-  { name: "Sportswear", slug: "sportswear", description: "Track pants, lowers & shorts", icon: "🏃" },
-  { name: "Suits & Blazers", slug: "suits-blazers", description: "Blazers, suits & waistcoats", icon: "🤵" },
-  { name: "Innerwear", slug: "innerwear", description: "Men's innerwear collection", icon: "🩲" },
-  { name: "Nightwear", slug: "nightwear", description: "Night suits & pajamas", icon: "🌙" },
-  { name: "Accessories", slug: "accessories", description: "Belts, socks & accessories", icon: "🧦" },
+  {
+    name: "Shirts",
+    slug: "shirts",
+    description: "Formal, casual, printed & checks",
+    icon: "👔",
+  },
+  {
+    name: "T-Shirts",
+    slug: "t-shirts",
+    description: "Round neck, polo & oversized",
+    icon: "👕",
+  },
+  {
+    name: "Jeans",
+    slug: "jeans",
+    description: "Slim fit, regular & baggy",
+    icon: "👖",
+  },
+  {
+    name: "Trousers & Pants",
+    slug: "trousers-pants",
+    description: "Formal, chinos & cargo",
+    icon: "🩳",
+  },
+  {
+    name: "Ethnic Wear",
+    slug: "ethnic-wear",
+    description: "Kurtas & festive collections",
+    icon: "🥻",
+  },
+  {
+    name: "Winter Wear",
+    slug: "winter-wear",
+    description: "Jackets, hoodies & sweaters",
+    icon: "🧥",
+  },
+  {
+    name: "Sportswear",
+    slug: "sportswear",
+    description: "Track pants, lowers & shorts",
+    icon: "🏃",
+  },
+  {
+    name: "Suits & Blazers",
+    slug: "suits-blazers",
+    description: "Blazers, suits & waistcoats",
+    icon: "🤵",
+  },
+  {
+    name: "Innerwear",
+    slug: "innerwear",
+    description: "Men's innerwear collection",
+    icon: "🩲",
+  },
+  {
+    name: "Nightwear",
+    slug: "nightwear",
+    description: "Night suits & pajamas",
+    icon: "🌙",
+  },
+  {
+    name: "Accessories",
+    slug: "accessories",
+    description: "Belts, socks & accessories",
+    icon: "🧦",
+  },
 ];
 
 type Product = {
@@ -33,10 +99,28 @@ type Product = {
 };
 
 export default function Home() {
+  const router = useRouter();
+
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
 
+  const [user, setUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+
   useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthReady(true);
+    });
+
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
     async function fetchProducts() {
       try {
         const productsQuery = query(
@@ -51,22 +135,112 @@ export default function Home() {
           ...item.data(),
         })) as Product[];
 
-        setProducts(productData);
+        if (active) {
+          setProducts(productData);
+        }
       } catch (error) {
         console.error("Homepage products error:", error);
       } finally {
-        setLoadingProducts(false);
+        if (active) {
+          setLoadingProducts(false);
+        }
       }
     }
 
-    fetchProducts();
+    void fetchProducts();
+
+    return () => {
+      active = false;
+    };
   }, []);
+
+  async function handleLogout() {
+    if (loggingOut) return;
+
+    setLoggingOut(true);
+    setLogoutError("");
+
+    try {
+      await signOut(auth);
+      router.push("/");
+    } catch (error) {
+      console.error("Customer logout error:", error);
+      setLogoutError("Logout nahi ho saka. Dobara try karein.");
+    } finally {
+      setLoggingOut(false);
+    }
+  }
+
+  function AccountActions({ mobile = false }: { mobile?: boolean }) {
+    const containerClass = mobile
+      ? "flex flex-wrap items-center gap-2"
+      : "flex shrink-0 items-center gap-2";
+
+    if (!authReady) {
+      return (
+        <div className={containerClass}>
+          <Link
+            href="/account/login"
+            className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-semibold text-gray-800 hover:border-red-700 hover:text-red-700"
+          >
+            Login
+          </Link>
+          <Link
+            href="/account/register"
+            className="rounded-lg bg-red-700 px-3 py-2.5 text-sm font-semibold text-white hover:bg-red-800"
+          >
+            Register
+          </Link>
+        </div>
+      );
+    }
+
+    if (user) {
+      return (
+        <div className={containerClass}>
+          <Link
+            href="/account/orders"
+            className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-semibold text-gray-800 hover:border-red-700 hover:text-red-700"
+          >
+            My Orders
+          </Link>
+
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            disabled={loggingOut}
+            className="rounded-lg bg-gray-900 px-3 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
+          >
+            {loggingOut ? "Logging out…" : "Logout"}
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className={containerClass}>
+        <Link
+          href="/account/login"
+          className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-semibold text-gray-800 hover:border-red-700 hover:text-red-700"
+        >
+          Login
+        </Link>
+
+        <Link
+          href="/account/register"
+          className="rounded-lg bg-red-700 px-3 py-2.5 text-sm font-semibold text-white hover:bg-red-800"
+        >
+          Register
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-white text-gray-900">
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
+      <header className="sticky top-0 z-50 border-b border-gray-200 bg-white">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:py-4">
           <Link href="/" className="shrink-0">
             <h1 className="text-xl font-black tracking-tight text-red-700 sm:text-2xl">
               MAHAKAL A TO Z
@@ -76,21 +250,60 @@ export default function Home() {
             </p>
           </Link>
 
-          <nav className="hidden items-center gap-6 text-sm font-medium md:flex">
-            <Link href="/" className="hover:text-red-700">Home</Link>
-            <Link href="#categories" className="hover:text-red-700">Categories</Link>
-            <Link href="#products" className="hover:text-red-700">Products</Link>
-            <Link href="#about" className="hover:text-red-700">About Us</Link>
-            <Link href="#enquiry" className="hover:text-red-700">Contact</Link>
+          <nav className="hidden items-center gap-5 text-sm font-medium lg:flex">
+            <Link href="/" className="hover:text-red-700">
+              Home
+            </Link>
+            <Link href="#categories" className="hover:text-red-700">
+              Categories
+            </Link>
+            <Link href="#products" className="hover:text-red-700">
+              Products
+            </Link>
+            <Link href="#about" className="hover:text-red-700">
+              About Us
+            </Link>
+            <Link href="#enquiry" className="hover:text-red-700">
+              Contact
+            </Link>
           </nav>
 
-          <Link
-            href="/enquiry"
-            className="rounded-lg bg-red-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-800"
-          >
-            Enquire Now
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <AccountActions />
+
+            <Link
+              href="/enquiry"
+              className="rounded-lg bg-red-700 px-3 py-2.5 text-sm font-semibold text-white hover:bg-red-800 sm:px-4"
+            >
+              Enquire Now
+            </Link>
+          </div>
+
+          {/* Mobile navigation */}
+          <nav className="flex w-full flex-wrap items-center gap-x-5 gap-y-2 border-t border-gray-100 pt-3 text-sm font-medium lg:hidden">
+            <Link href="/" className="hover:text-red-700">
+              Home
+            </Link>
+            <Link href="#categories" className="hover:text-red-700">
+              Categories
+            </Link>
+            <Link href="#products" className="hover:text-red-700">
+              Products
+            </Link>
+            <Link href="#about" className="hover:text-red-700">
+              About Us
+            </Link>
+            <Link href="#enquiry" className="hover:text-red-700">
+              Contact
+            </Link>
+          </nav>
         </div>
+
+        {logoutError && (
+          <p role="alert" className="px-4 pb-2 text-right text-sm text-red-600">
+            {logoutError}
+          </p>
+        )}
       </header>
 
       {/* Hero */}
@@ -225,12 +438,15 @@ export default function Home() {
           ) : products.length === 0 ? (
             <div className="rounded-xl border border-dashed bg-white px-5 py-12 text-center">
               <div className="text-5xl">👔</div>
+
               <h3 className="mt-4 text-xl font-bold">
                 Products Coming Soon
               </h3>
+
               <p className="mt-2 text-gray-500">
                 Our latest collection will be available here soon.
               </p>
+
               <Link
                 href="/enquiry"
                 className="mt-5 inline-block rounded-lg bg-red-700 px-6 py-3 font-bold text-white hover:bg-red-800"
@@ -280,12 +496,18 @@ export default function Home() {
                         Wholesale Price
                       </p>
                       <p className="text-xl font-black text-gray-900">
-                        ₹{Number(product.wholesalePrice || 0).toLocaleString("en-IN")}
+                        ₹
+                        {Number(
+                          product.wholesalePrice || 0
+                        ).toLocaleString("en-IN")}
                       </p>
                     </div>
 
                     <p className="mt-1 text-xs text-gray-500">
-                      Retail: ₹{Number(product.retailPrice || 0).toLocaleString("en-IN")}
+                      Retail: ₹
+                      {Number(
+                        product.retailPrice || 0
+                      ).toLocaleString("en-IN")}
                     </p>
 
                     <p className="mt-2 text-xs font-medium text-gray-600">
@@ -318,6 +540,7 @@ export default function Home() {
             <h2 className="text-3xl font-black sm:text-4xl">
               Looking for Wholesale Rates?
             </h2>
+
             <p className="mt-3 max-w-xl text-red-100">
               Tell us which products and quantities you need.
               Our team will contact you to discuss availability,
@@ -368,15 +591,37 @@ export default function Home() {
             <h2 className="text-xl font-black text-red-500">
               MAHAKAL A TO Z
             </h2>
+
             <p className="mt-2 text-sm text-gray-400">
               Men&apos;s Wear Wholesale & Bulk Supply
             </p>
           </div>
 
           <div className="flex flex-wrap gap-5 text-sm text-gray-300">
-            <Link href="/" className="hover:text-white">Home</Link>
-            <Link href="#categories" className="hover:text-white">Categories</Link>
-            <Link href="/enquiry" className="hover:text-white">Enquiry</Link>
+            <Link href="/" className="hover:text-white">
+              Home
+            </Link>
+            <Link href="#categories" className="hover:text-white">
+              Categories
+            </Link>
+            <Link href="/enquiry" className="hover:text-white">
+              Enquiry
+            </Link>
+
+            {user ? (
+              <Link href="/account/orders" className="hover:text-white">
+                My Orders
+              </Link>
+            ) : (
+              <>
+                <Link href="/account/login" className="hover:text-white">
+                  Login
+                </Link>
+                <Link href="/account/register" className="hover:text-white">
+                  Register
+                </Link>
+              </>
+            )}
           </div>
         </div>
 
