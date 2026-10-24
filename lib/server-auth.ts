@@ -10,6 +10,10 @@ export type VerifiedUser = {
   phoneNumber?: string;
 };
 
+/**
+ * Verifies the Firebase ID token from the Authorization header.
+ * Returns the verified user or null if the token is missing or invalid.
+ */
 export async function getVerifiedUser(
   request: NextRequest
 ): Promise<VerifiedUser | null> {
@@ -37,20 +41,30 @@ export async function getVerifiedUser(
         ? { phoneNumber: decoded.phone_number }
         : {}),
     };
-  } catch (error) {
-    // Do not expose Firebase token verification details to clients.
-    console.warn(
-      "Firebase ID token verification failed:",
-      error instanceof Error ? error.code ?? error.name : "Unknown error"
-    );
+  } catch (error: unknown) {
+    // Log only the error code/name; never expose token details to clients.
+    const errorCode =
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      typeof error.code === "string"
+        ? error.code
+        : error instanceof Error
+          ? error.name
+          : "Unknown error";
+
+    console.warn("Firebase ID token verification failed:", errorCode);
 
     return null;
   }
 }
 
+/**
+ * Returns a 401 response when authentication is required.
+ */
 export function unauthorized(
   message = "Please sign in to continue."
-) {
+): NextResponse {
   return NextResponse.json(
     { error: message },
     {
@@ -62,6 +76,9 @@ export function unauthorized(
   );
 }
 
+/**
+ * Returns the authenticated user only if their UID matches ADMIN_UID.
+ */
 export async function requireAdmin(
   request: NextRequest
 ): Promise<VerifiedUser | null> {
@@ -75,9 +92,12 @@ export async function requireAdmin(
   return user;
 }
 
+/**
+ * Returns a 403 response when the authenticated user lacks permission.
+ */
 export function forbidden(
   message = "You do not have permission to perform this action."
-) {
+): NextResponse {
   return NextResponse.json(
     { error: message },
     {
