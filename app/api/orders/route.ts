@@ -2,6 +2,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
+import {
+  getVerifiedUser,
+  unauthorized,
+} from "@/lib/server-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -78,6 +82,15 @@ function getDeliveryCharge(): number {
 
 export async function POST(request: NextRequest) {
   try {
+    // 1. Verify Firebase authentication before creating an order.
+    const user = await getVerifiedUser(request);
+
+    if (!user) {
+      return unauthorized(
+        "Please sign in before placing your order."
+      );
+    }
+
     let body: unknown;
 
     try {
@@ -146,7 +159,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Merge duplicate product/size/color combinations.
+    // 2. Merge duplicate product/size/color combinations.
     const merged = new Map<string, IncomingItem>();
 
     for (const rawItem of body.items) {
@@ -203,16 +216,17 @@ export async function POST(request: NextRequest) {
 
     const items = Array.from(merged.values());
     const deliveryCharge = getDeliveryCharge();
-
     const orderRef = adminDb.collection("orders").doc();
 
+    // 3. Verify product prices and stock, then create the order
+    // atomically in a Firestore transaction.
     const result = await adminDb.runTransaction(
       async (transaction) => {
         const productRefs = items.map((item) =>
           adminDb.collection("products").doc(item.productId)
         );
 
-        // Complete all reads before performing transaction writes.
+        // Read all product documents before writing anything.
         const snapshots = await Promise.all(
           productRefs.map((ref) => transaction.get(ref))
         );
@@ -230,6 +244,7 @@ export async function POST(request: NextRequest) {
         }> = [];
 
         const quantityByProduct = new Map<string, number>();
+
         const snapshotByProduct = new Map<
           string,
           (typeof snapshots)[number]
@@ -275,11 +290,7 @@ export async function POST(request: NextRequest) {
             throw new Error("INSUFFICIENT_STOCK");
           }
 
-          quantityByProduct.set(
-            snapshot.id,
-            totalRequested
-          );
-
+          quantityByProduct.set(snapshot.id, totalRequested);
           snapshotByProduct.set(snapshot.id, snapshot);
 
           if (
@@ -347,10 +358,10 @@ export async function POST(request: NextRequest) {
             (subtotal + deliveryCharge) * 100
           ) / 100;
 
-        // Deduct stock once per unique product, including
-        // when the cart contains multiple sizes or colours.
+        // Deduct stock only once per unique product.
         for (const [productId, snapshot] of snapshotByProduct) {
-          const quantity = quantityByProduct.get(productId) ?? 0;
+          const quantity =
+            quantityByProduct.get(productId) ?? 0;
 
           if (quantity === 0) continue;
 
@@ -367,20 +378,34 @@ export async function POST(request: NextRequest) {
           });
         }
 
+        // 4. Link this order to the verified Firebase user.
+        // These UID fields support existing customer-order
+        // queries that may use different field names.
         transaction.set(orderRef, {
           orderId: orderRef.id,
+
+          customerId: user.uid,
+          userId: user.uid,
+          uid: user.uid,
+          customerUid: user.uid,
+
           customer,
+
           items: verifiedItems,
+
           paymentMethod: "COD",
           paymentStatus: "pending",
           status: "pending",
+
           subtotal,
           deliveryCharge,
           deliveryDistanceKm: null,
           deliveryPricingMode: "temporary_flat_rate",
           totalAmount,
           currency: "INR",
+
           deliveryStatus: "not_assigned",
+
           createdAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
         });
@@ -395,8 +420,13 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    return NextResponse.json(result, { status: 201 });
-  } catch (error) {
+    return NextResponse.json(result, {
+      status: 201,
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (error: unknown) {
     console.error("Create order failed:", error);
 
     if (error instanceof Error) {
@@ -440,17 +470,26 @@ export async function POST(request: NextRequest) {
       if (known) {
         return NextResponse.json(
           { error: known.message },
-          { status: known.status }
+          {
+            status: known.status,
+            headers: {
+              "Cache-Control": "no-store",
+            },
+          }
         );
       }
     }
 
     return NextResponse.json(
       {
-        error:
-          "Order could not be created. Please try again.",
+        error: "Order could not be created. Please try again.",
       },
-      { status: 500 }
+      {
+        status: 500,
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
     );
   }
 }
