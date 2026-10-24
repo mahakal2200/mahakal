@@ -23,9 +23,12 @@ const ALLOWED_STATUSES = [
 
 type OrderStatus = (typeof ALLOWED_STATUSES)[number];
 
-type OrderItem = {
-  productId: string;
-  quantity: number;
+type AdminOrder = {
+  id: string;
+  orderId: string;
+  status: OrderStatus;
+  createdAt: string | null;
+  [key: string]: unknown;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -67,7 +70,7 @@ function serializeValue(value: unknown): unknown {
   }
 
   if (
-    value &&
+    value !== null &&
     typeof value === "object" &&
     "toDate" in value &&
     typeof value.toDate === "function"
@@ -83,7 +86,7 @@ function serializeValue(value: unknown): unknown {
     return value.map(serializeValue);
   }
 
-  if (value && typeof value === "object") {
+  if (isRecord(value)) {
     return Object.fromEntries(
       Object.entries(value).map(([key, child]) => [
         key,
@@ -131,39 +134,45 @@ export async function GET(request: NextRequest) {
       .limit(200)
       .get();
 
-    const orders = snapshot.docs.map((document) => {
+    // Explicitly type the array so createdAt is available to TypeScript.
+    const orders: AdminOrder[] = snapshot.docs.map((document) => {
       const data = serializeValue(
         document.data()
       ) as Record<string, unknown>;
+
+      const createdAt =
+        typeof data.createdAt === "string"
+          ? data.createdAt
+          : null;
 
       return {
         ...data,
         id: document.id,
         orderId:
-          typeof data.orderId === "string"
+          typeof data.orderId === "string" && data.orderId.trim()
             ? data.orderId
             : document.id,
         status:
           normalizeStatus(data.status ?? data.orderStatus) ??
           "Pending",
+        createdAt,
       };
     });
 
+    // Newest orders first. Invalid or missing dates go last.
     orders.sort((a, b) => {
-      const dateA =
-        typeof a.createdAt === "string"
-          ? new Date(a.createdAt).getTime()
-          : 0;
+      const dateA = a.createdAt
+        ? Date.parse(a.createdAt)
+        : 0;
 
-      const dateB =
-        typeof b.createdAt === "string"
-          ? new Date(b.createdAt).getTime()
-          : 0;
+      const dateB = b.createdAt
+        ? Date.parse(b.createdAt)
+        : 0;
 
-      return (
-        (Number.isFinite(dateB) ? dateB : 0) -
-        (Number.isFinite(dateA) ? dateA : 0)
-      );
+      const validDateA = Number.isFinite(dateA) ? dateA : 0;
+      const validDateB = Number.isFinite(dateB) ? dateB : 0;
+
+      return validDateB - validDateA;
     });
 
     return NextResponse.json(
@@ -281,10 +290,8 @@ export async function PATCH(request: NextRequest) {
           update.orderStatus = nextStatus;
         }
 
-        if (
-          nextStatus !== "Cancelled" ||
-          currentStatus === "Cancelled"
-        ) {
+        // All non-cancellation status updates.
+        if (nextStatus !== "Cancelled") {
           transaction.update(orderRef, update);
 
           return {
@@ -293,9 +300,7 @@ export async function PATCH(request: NextRequest) {
           };
         }
 
-        // Aggregate quantities by product ID so duplicate variants
-        // restore the combined quantity in one product update.
-        const items: OrderItem[] = [];
+        // Aggregate quantities by product ID.
         const quantityByProduct = new Map<string, number>();
 
         if (!Array.isArray(order.items) || order.items.length === 0) {
@@ -350,7 +355,6 @@ export async function PATCH(request: NextRequest) {
           }
 
           quantityByProduct.set(productId, combined);
-          items.push({ productId, quantity });
         }
 
         const productRefs = Array.from(
@@ -359,7 +363,7 @@ export async function PATCH(request: NextRequest) {
           adminDb.collection("products").doc(productId)
         );
 
-        // IMPORTANT: complete all Firestore reads before any writes.
+        // IMPORTANT: complete every read before any transaction write.
         const productSnapshots = await Promise.all(
           productRefs.map((ref) => transaction.get(ref))
         );
@@ -369,13 +373,15 @@ export async function PATCH(request: NextRequest) {
           remainingStock: number;
         }> = [];
 
-        for (let index = 0; index < productSnapshots.length; index++) {
+        for (
+          let index = 0;
+          index < productSnapshots.length;
+          index++
+        ) {
           const productSnapshot = productSnapshots[index];
           const productRef = productRefs[index];
 
           if (!productSnapshot.exists) {
-            // Do not silently mark cancellation complete if stock
-            // cannot be restored for a missing product document.
             return {
               success: false as const,
               status: 409,
@@ -420,7 +426,7 @@ export async function PATCH(request: NextRequest) {
           });
         }
 
-        // All reads have completed. It is now safe to write.
+        // All reads are complete. Now restore stock and update the order.
         for (const productUpdate of productUpdates) {
           transaction.update(productUpdate.ref, {
             stock: productUpdate.remainingStock,
