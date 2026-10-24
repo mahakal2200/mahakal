@@ -13,27 +13,37 @@ export type VerifiedUser = {
 export async function getVerifiedUser(
   request: NextRequest
 ): Promise<VerifiedUser | null> {
-  const authorization = request.headers.get("authorization") || "";
+  const authorization = request.headers.get("authorization");
 
-  if (!authorization.startsWith("Bearer ")) {
+  if (!authorization) {
     return null;
   }
 
-  const token = authorization.slice(7).trim();
+  const match = authorization.match(/^Bearer\s+(\S+)$/i);
 
-  if (!token) {
+  if (!match) {
     return null;
   }
+
+  const token = match[1];
 
   try {
     const decoded = await adminAuth.verifyIdToken(token, true);
 
     return {
       uid: decoded.uid,
-      email: decoded.email,
-      phoneNumber: decoded.phone_number,
+      ...(decoded.email ? { email: decoded.email } : {}),
+      ...(decoded.phone_number
+        ? { phoneNumber: decoded.phone_number }
+        : {}),
     };
-  } catch {
+  } catch (error) {
+    // Do not expose Firebase token verification details to clients.
+    console.warn(
+      "Firebase ID token verification failed:",
+      error instanceof Error ? error.code ?? error.name : "Unknown error"
+    );
+
     return null;
   }
 }
@@ -43,7 +53,12 @@ export function unauthorized(
 ) {
   return NextResponse.json(
     { error: message },
-    { status: 401 }
+    {
+      status: 401,
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    }
   );
 }
 
@@ -51,7 +66,7 @@ export async function requireAdmin(
   request: NextRequest
 ): Promise<VerifiedUser | null> {
   const user = await getVerifiedUser(request);
-  const allowedUid = process.env.ADMIN_UID;
+  const allowedUid = process.env.ADMIN_UID?.trim();
 
   if (!allowedUid || !user || user.uid !== allowedUid) {
     return null;
@@ -65,6 +80,11 @@ export function forbidden(
 ) {
   return NextResponse.json(
     { error: message },
-    { status: 403 }
+    {
+      status: 403,
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    }
   );
 }
