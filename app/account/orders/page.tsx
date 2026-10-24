@@ -3,157 +3,76 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { onAuthStateChanged } from "firebase/auth";
+import { useRouter } from "next/navigation";
+import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { logoutCustomer } from "@/lib/customer-auth";
 
 type OrderItem = {
-  id?: string;
-  productId?: string;
   name?: string;
-  title?: string;
-  image?: string;
   quantity?: number;
-  price?: number;
-  unitPrice?: number;
-  lineTotal?: number;
   size?: string;
   color?: string;
+  lineTotal?: number;
 };
 
-type OrderTimestamp = {
-  seconds?: number;
-  _seconds?: number;
-  toDate?: () => Date;
-};
-
-type CustomerOrder = {
+type Order = {
   id: string;
-  orderId?: string;
-  orderNumber?: string;
   status?: string;
-  orderStatus?: string;
-  paymentMethod?: string;
   paymentStatus?: string;
-  total?: number;
+  paymentMethod?: string;
   totalAmount?: number;
   subtotal?: number;
   deliveryCharge?: number;
-  createdAt?: string | number | OrderTimestamp | null;
+  customerType?: string;
+  createdAt?: string | null;
   items?: OrderItem[];
 };
 
-type OrdersApiResponse = {
-  orders?: CustomerOrder[];
+type OrdersResponse = {
+  orders?: Order[];
   error?: string;
 };
 
-function formatPrice(amount: number): string {
-  if (!Number.isFinite(amount)) amount = 0;
+const statusLabel: Record<string, string> = {
+  pending: "Pending",
+  confirmed: "Confirmed",
+  packed: "Packed",
+  shipped: "Shipped",
+  delivered: "Delivered",
+  cancelled: "Cancelled",
+};
 
+function money(value: unknown) {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
     maximumFractionDigits: 2,
-  }).format(amount);
+  }).format(typeof value === "number" && Number.isFinite(value) ? value : 0);
 }
 
-function formatDate(value: CustomerOrder["createdAt"]): string {
-  if (value === undefined || value === null) {
-    return "Date unavailable";
-  }
-
-  let date: Date;
-
-  if (typeof value === "string" || typeof value === "number") {
-    date = new Date(value);
-  } else {
-    try {
-      if (typeof value.toDate === "function") {
-        date = value.toDate();
-      } else {
-        const seconds =
-          typeof value.seconds === "number"
-            ? value.seconds
-            : value._seconds;
-
-        if (
-          typeof seconds !== "number" ||
-          !Number.isFinite(seconds)
-        ) {
-          return "Date unavailable";
-        }
-
-        date = new Date(seconds * 1000);
-      }
-    } catch {
-      return "Date unavailable";
-    }
-  }
-
-  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
-    return "Date unavailable";
-  }
-
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
-}
-
-function normalizeStatus(order: CustomerOrder): string {
-  const status = order.status ?? order.orderStatus ?? "pending";
-
-  return status
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
-}
-
-function normalizePaymentStatus(value?: string): string {
-  const status = value ?? "pending";
-
-  return status
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
-}
-
-function getItemTotal(item: OrderItem): number {
-  if (
-    typeof item.lineTotal === "number" &&
-    Number.isFinite(item.lineTotal)
-  ) {
-    return item.lineTotal;
-  }
-
-  const unitPrice = Number(item.unitPrice ?? item.price ?? 0);
-  const quantity = Number(item.quantity ?? 1);
-
-  if (
-    !Number.isFinite(unitPrice) ||
-    !Number.isFinite(quantity)
-  ) {
-    return 0;
-  }
-
-  return unitPrice * quantity;
+function normalizeStatus(status?: string) {
+  return (status || "pending").toLowerCase();
 }
 
 export default function CustomerOrdersPage() {
-  const [orders, setOrders] = useState<CustomerOrder[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const router = useRouter();
 
-  const loadOrders = useCallback(async (user: {
-    getIdToken: () => Promise<string>;
-  }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const loadOrders = useCallback(async (current: User) => {
     setLoading(true);
     setError("");
 
     try {
-      const token = await user.getIdToken();
+      const token = await current.getIdToken();
 
-      const response = await fetch("/api/customer/orders", {
+      const response = await fetch("/api/account/orders", {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -161,20 +80,16 @@ export default function CustomerOrdersPage() {
         cache: "no-store",
       });
 
-      const data: OrdersApiResponse = await response.json();
+      const result: OrdersResponse = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.error ?? "Unable to load your orders."
-        );
+        throw new Error(result.error || "Orders load nahi hue.");
       }
 
-      setOrders(Array.isArray(data.orders) ? data.orders : []);
+      setOrders(Array.isArray(result.orders) ? result.orders : []);
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load orders. Please try again."
+        err instanceof Error ? err.message : "Orders load nahi hue."
       );
     } finally {
       setLoading(false);
@@ -182,214 +97,268 @@ export default function CustomerOrdersPage() {
   }, []);
 
   useEffect(() => {
-    let active = true;
+    const unsubscribe = onAuthStateChanged(auth, (current) => {
+      setUser(current);
+      setAuthReady(true);
 
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!active) return;
-
-      if (!user) {
-        window.location.replace("/account/login");
+      if (!current) {
+        setOrders([]);
+        setLoading(false);
+        router.replace(
+          `/account/login?next=${encodeURIComponent("/account/orders")}`
+        );
         return;
       }
 
-      setLoading(true);
-      setError("");
+      void loadOrders(current);
+    });
 
-      try {
-        const token = await user.getIdToken();
+    return unsubscribe;
+  }, [loadOrders, router]);
 
-        const response = await fetch("/api/customer/orders", {
-          method: "GET",
+  async function cancelOrder(order: Order) {
+    if (!user || busyId) return;
+
+    const status = normalizeStatus(order.status);
+
+    if (!["pending", "confirmed"].includes(status)) {
+      setError("Is order ko ab online cancel nahi kiya ja sakta.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Kya aap order ${order.id} cancel karna chahte hain?`
+    );
+
+    if (!confirmed) return;
+
+    setBusyId(order.id);
+    setError("");
+    setNotice("");
+
+    try {
+      const token = await user.getIdToken();
+
+      const response = await fetch(
+        `/api/account/orders/${encodeURIComponent(order.id)}`,
+        {
+          method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
           },
           cache: "no-store",
-        });
-
-        const data: OrdersApiResponse = await response.json();
-
-        if (!response.ok) {
-          throw new Error(
-            data.error ?? "Unable to load your orders."
-          );
         }
+      );
 
-        if (active) {
-          setOrders(
-            Array.isArray(data.orders) ? data.orders : []
-          );
-        }
-      } catch (err) {
-        if (active) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Unable to load orders. Please try again."
-          );
-        }
-      } finally {
-        if (active) setLoading(false);
+      const result: { error?: string } = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Order cancel nahi hua.");
       }
-    });
 
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, []);
-
-  async function handleLogout() {
-    setBusy(true);
-    setError("");
-
-    try {
-      await logoutCustomer();
-      window.location.replace("/account/login");
-    } catch {
-      setError("Logout failed. Please try again.");
-      setBusy(false);
+      setNotice(`Order ${order.id} cancel ho gaya.`);
+      await loadOrders(user);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Order cancel nahi hua."
+      );
+    } finally {
+      setBusyId("");
     }
   }
 
-  if (loading) {
+  async function logout() {
+    await signOut(auth);
+    router.replace("/");
+  }
+
+  if (!authReady) {
     return (
-      <main className="mx-auto max-w-4xl px-4 py-10">
-        <p className="text-gray-600">Loading your orders...</p>
+      <main className="px-4 py-20 text-center text-gray-600">
+        Account load ho raha hai…
       </main>
     );
   }
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-10">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">My Orders</h1>
-          <p className="mt-2 text-sm text-gray-600">
-            View your purchases and delivery status.
-          </p>
-        </div>
+    <main className="min-h-[70vh] bg-gray-50 px-4 py-10">
+      <div className="mx-auto max-w-5xl">
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-red-600">
+              MAHAKAL A TO Z
+            </p>
+            <h1 className="mt-1 text-3xl font-extrabold text-gray-900">
+              My Account & Orders
+            </h1>
+            <p className="mt-2 text-sm text-gray-600">
+              {user?.displayName ||
+                user?.email ||
+                user?.phoneNumber ||
+                "Customer"}
+            </p>
+          </div>
 
-        <button
-          type="button"
-          onClick={handleLogout}
-          disabled={busy}
-          className="rounded-lg border px-4 py-2 disabled:opacity-60"
-        >
-          {busy ? "Signing out..." : "Logout"}
-        </button>
-      </header>
-
-      {error && (
-        <div
-          role="alert"
-          className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
-        >
-          {error}
-        </div>
-      )}
-
-      {!error && orders.length === 0 && (
-        <section className="mt-8 rounded-xl border p-8 text-center">
-          <h2 className="text-xl font-semibold">No orders yet</h2>
-          <p className="mt-2 text-gray-600">
-            Your orders will appear here after checkout.
-          </p>
-
-          <Link
-            href="/products"
-            className="mt-5 inline-block rounded-lg bg-black px-5 py-3 text-white"
-          >
-            Browse products
-          </Link>
-        </section>
-      )}
-
-      <div className="mt-8 space-y-5">
-        {orders.map((order) => {
-          const total = Number(
-            order.totalAmount ?? order.total ?? 0
-          );
-
-          const status = normalizeStatus(order);
-
-          return (
-            <article
-              key={order.id}
-              className="rounded-xl border border-gray-200 p-5"
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/products"
+              className="rounded-lg border border-gray-300 bg-white px-4 py-2 font-semibold"
             >
-              <div className="flex flex-wrap justify-between gap-3">
-                <div>
-                  <p className="font-semibold">
-                    Order #
-                    {order.orderNumber ??
-                      order.orderId ??
-                      order.id}
-                  </p>
+              Shop
+            </Link>
 
-                  <p className="mt-1 text-sm text-gray-500">
-                    {formatDate(order.createdAt)}
-                  </p>
-                </div>
+            <button
+              onClick={() => void loadOrders(user!)}
+              disabled={!user || loading}
+              className="rounded-lg border border-gray-300 bg-white px-4 py-2 font-semibold disabled:opacity-50"
+            >
+              {loading ? "Loading…" : "Refresh"}
+            </button>
 
-                <span className="h-fit rounded-full bg-gray-100 px-3 py-1 text-sm font-medium">
-                  {status}
-                </span>
-              </div>
+            <button
+              onClick={() => void logout()}
+              className="rounded-lg bg-gray-900 px-4 py-2 font-semibold text-white"
+            >
+              Logout
+            </button>
+          </div>
+        </header>
 
-              <div className="mt-4 space-y-3">
-                {(order.items ?? []).map((item, index) => (
-                  <div
-                    key={
-                      item.id ??
-                      `${item.productId ?? "product"}-${index}`
-                    }
-                    className="flex items-start justify-between gap-3 border-t pt-3"
+        {error && (
+          <div
+            role="alert"
+            className="mt-5 rounded-lg bg-red-50 p-4 text-sm text-red-700"
+          >
+            {error}
+            <button
+              onClick={() => user && void loadOrders(user)}
+              className="ml-3 font-bold underline"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {notice && (
+          <p
+            role="status"
+            className="mt-5 rounded-lg bg-green-50 p-4 text-sm text-green-800"
+          >
+            {notice}
+          </p>
+        )}
+
+        <section className="mt-7">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-xl font-bold text-gray-900">
+              Order history
+            </h2>
+            <span className="text-sm text-gray-500">
+              {orders.length} orders
+            </span>
+          </div>
+
+          {loading && orders.length === 0 ? (
+            <p className="py-12 text-center text-gray-600">
+              Orders load ho rahe hain…
+            </p>
+          ) : orders.length === 0 ? (
+            <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center">
+              <h3 className="text-lg font-bold">No orders yet</h3>
+              <p className="mt-2 text-sm text-gray-600">
+                Aapka pehla order yahan dikhai dega.
+              </p>
+              <Link
+                href="/products"
+                className="mt-5 inline-flex rounded-lg bg-red-600 px-5 py-3 font-bold text-white"
+              >
+                Browse products
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {orders.map((order) => {
+                const status = normalizeStatus(order.status);
+                const canCancel = ["pending", "confirmed"].includes(status);
+
+                return (
+                  <article
+                    key={order.id}
+                    className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
                   >
-                    <div className="min-w-0">
-                      <p className="font-medium">
-                        {item.name ?? item.title ?? "Product"}
-                      </p>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs text-gray-500">ORDER ID</p>
+                        <p className="break-all font-bold text-gray-900">
+                          {order.id}
+                        </p>
+                        <p className="mt-1 text-sm text-gray-500">
+                          {order.createdAt &&
+                          Number.isFinite(Date.parse(order.createdAt))
+                            ? new Date(order.createdAt).toLocaleString("en-IN")
+                            : "Date unavailable"}
+                        </p>
+                      </div>
 
-                      <p className="mt-1 text-sm text-gray-500">
-                        Qty: {item.quantity ?? 1}
-                        {item.size ? ` · Size: ${item.size}` : ""}
-                        {item.color ? ` · Color: ${item.color}` : ""}
-                      </p>
+                      <div className="text-right">
+                        <span className="inline-flex rounded-full bg-amber-50 px-3 py-1 text-sm font-bold capitalize text-amber-800">
+                          {statusLabel[status] || status}
+                        </span>
+                        <p className="mt-2 text-lg font-extrabold">
+                          {money(order.totalAmount)}
+                        </p>
+                      </div>
                     </div>
 
-                    <p className="whitespace-nowrap text-sm">
-                      {formatPrice(getItemTotal(item))}
-                    </p>
-                  </div>
-                ))}
-              </div>
+                    <div className="mt-4 border-t border-gray-100 pt-4">
+                      {(order.items || []).map((item, index) => (
+                        <div
+                          key={`${order.id}-${index}`}
+                          className="flex flex-wrap justify-between gap-2 py-1 text-sm"
+                        >
+                          <span>
+                            {item.name || "Product"} × {item.quantity || 1}
+                            {item.size ? ` · Size: ${item.size}` : ""}
+                            {item.color ? ` · Colour: ${item.color}` : ""}
+                          </span>
+                          <span className="font-semibold">
+                            {money(item.lineTotal)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
 
-              <div className="mt-4 flex flex-wrap justify-between gap-3 border-t pt-4">
-                <div>
-                  <p className="text-sm text-gray-500">Payment</p>
+                    <div className="mt-4 flex flex-wrap justify-between gap-2 border-t border-gray-100 pt-3 text-sm">
+                      <span>
+                        Subtotal: {money(order.subtotal)} · Delivery:{" "}
+                        {money(order.deliveryCharge)}
+                      </span>
+                      <span>
+                        Payment:{" "}
+                        {(order.paymentMethod || "COD").toUpperCase()} ·{" "}
+                        {(order.paymentStatus || "pending").toLowerCase()}
+                      </span>
+                    </div>
 
-                  <p className="font-medium">
-                    {order.paymentMethod ?? "COD"}
-                  </p>
-
-                  <p className="text-sm text-gray-500">
-                    {normalizePaymentStatus(order.paymentStatus)}
-                  </p>
-                </div>
-
-                <div className="text-right">
-                  <p className="text-sm text-gray-500">
-                    Order total
-                  </p>
-
-                  <p className="text-lg font-bold">
-                    {formatPrice(total)}
-                  </p>
-                </div>
-              </div>
-            </article>
-          );
-        })}
+                    {canCancel && (
+                      <div className="mt-4 flex justify-end">
+                        <button
+                          onClick={() => void cancelOrder(order)}
+                          disabled={busyId !== "" || loading}
+                          className="rounded-lg border border-red-200 px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {busyId === order.id
+                            ? "Cancelling…"
+                            : "Cancel order"}
+                        </button>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </div>
     </main>
   );
