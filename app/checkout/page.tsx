@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { auth } from "@/lib/firebase";
 
 import {
   CART_UPDATED_EVENT,
@@ -36,11 +37,6 @@ type Quote = {
   deliveryCharge: number;
   pricingMode: string;
   currency: string;
-};
-
-type OrderResponse = {
-  orderId?: string;
-  error?: string;
 };
 
 function money(amount: number): string {
@@ -130,7 +126,8 @@ export default function CheckoutPage() {
                 ? data.pricingMode
                 : "temporary_flat_rate",
             currency:
-              "currency" in data && typeof data.currency === "string"
+              "currency" in data &&
+              typeof data.currency === "string"
                 ? data.currency
                 : "INR",
           });
@@ -207,12 +204,16 @@ export default function CheckoutPage() {
     if (submitting) return;
 
     if (!quote) {
-      setError("Delivery charge load nahi hua. Dobara try karein.");
+      setError(
+        "Delivery charge load nahi hua. Dobara try karein."
+      );
       return;
     }
 
     if (items.length === 0) {
-      setError("Aapka cart khaali hai. Pehle product add karein.");
+      setError(
+        "Aapka cart khaali hai. Pehle product add karein."
+      );
       return;
     }
 
@@ -226,7 +227,9 @@ export default function CheckoutPage() {
     }
 
     if (!/^[6-9]\d{9}$/.test(phone)) {
-      setError("Valid 10-digit Indian mobile number enter karein.");
+      setError(
+        "Valid 10-digit Indian mobile number enter karein."
+      );
       return;
     }
 
@@ -255,22 +258,42 @@ export default function CheckoutPage() {
         typeof item.id === "string" &&
         item.id.trim().length > 0 &&
         Number.isInteger(item.quantity) &&
-        item.quantity > 0
+        item.quantity > 0 &&
+        Number.isFinite(item.unitPrice) &&
+        item.unitPrice > 0
     );
 
     if (!validItems) {
-      setError("Cart mein invalid product details hain. Cart refresh karein.");
+      setError(
+        "Cart mein invalid product details hain. Cart refresh karein."
+      );
       return;
     }
 
     setSubmitting(true);
 
     try {
+      // The server requires a verified Firebase ID token.
+      const currentUser = auth.currentUser;
+
+      if (!currentUser) {
+        setError(
+          "Order place karne ke liye pehle login karein."
+        );
+        router.push("/account/login");
+        return;
+      }
+
+      // Refresh the Firebase ID token if necessary.
+      const idToken = await currentUser.getIdToken();
+
       const response = await fetch("/api/orders", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
         },
+        cache: "no-store",
         body: JSON.stringify({
           customer: {
             name,
@@ -302,6 +325,14 @@ export default function CheckoutPage() {
           typeof result.error === "string"
             ? result.error
             : "Order place nahi ho paaya. Dobara try karein.";
+
+        if (response.status === 401) {
+          setError(
+            "Login session expire ho gaya hai. Dobara login karke order place karein."
+          );
+          router.push("/account/login");
+          return;
+        }
 
         throw new Error(message);
       }
@@ -625,9 +656,8 @@ export default function CheckoutPage() {
             </button>
 
             <p className="mt-3 text-xs leading-5 text-gray-500">
-              Delivery charge abhi quote API se aata hai. Actual
-              distance-based pricing aur final payable amount ko server
-              par validate karna zaroori hai.
+              Delivery charge abhi quote API se aata hai. Server final
+              payable amount aur product prices validate karta hai.
             </p>
           </section>
 
